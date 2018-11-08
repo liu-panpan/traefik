@@ -53,10 +53,10 @@ func (r *Rules) host(hosts ...string) *mux.Route {
 	})
 }
 
-func (r *Rules) hostRegexp(hosts ...string) *mux.Route {
+func (r *Rules) hostRegexp(hostPatterns ...string) *mux.Route {
 	router := r.Route.Route.Subrouter()
-	for _, host := range hosts {
-		router.Host(strings.ToLower(host))
+	for _, hostPattern := range hostPatterns {
+		router.Host(hostPattern)
 	}
 	return r.Route.Route
 }
@@ -268,6 +268,9 @@ func (r *Rules) Parse(expression string) (*mux.Route, error) {
 			resultRoute = method.Call(inputs)[0].Interface().(*mux.Route)
 			if r.err != nil {
 				return r.err
+			}
+			if resultRoute == nil {
+				return fmt.Errorf("invalid expression: %s", expression)
 			}
 			if resultRoute.GetError() != nil {
 				return resultRoute.GetError()

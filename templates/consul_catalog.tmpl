@@ -8,6 +8,14 @@
     expression = "{{ $circuitBreaker.Expression }}"
   {{end}}
 
+  {{ $responseForwarding := getResponseForwarding $service.TraefikLabels }}
+  {{if $responseForwarding }}
+  [backends."backend-{{ $backendName }}".responseForwarding]
+    flushInterval = "{{ $responseForwarding.FlushInterval }}"
+  {{end}}
+
+
+
   {{ $loadBalancer := getLoadBalancer $service.TraefikLabels }}
   {{if $loadBalancer }}
   [backends."backend-{{ $backendName }}".loadBalancer]
@@ -32,6 +40,7 @@
     path = "{{ $healthCheck.Path }}"
     port = {{ $healthCheck.Port }}
     interval = "{{ $healthCheck.Interval }}"
+    timeout = "{{ $healthCheck.Timeout }}"
     hostname = "{{ $healthCheck.Hostname }}"
     {{if $healthCheck.Headers }}
     [backends."backend-{{ $backendName }}".healthCheck.headers]
@@ -105,6 +114,11 @@
       [frontends."frontend-{{ $service.ServiceName }}".auth.forward]
         address = "{{ $auth.Forward.Address }}"
         trustForwardHeader = {{ $auth.Forward.TrustForwardHeader }}
+        {{if $auth.Forward.AuthResponseHeaders }}
+        authResponseHeaders = [{{range $auth.Forward.AuthResponseHeaders }}
+          "{{.}}",
+          {{end}}]
+        {{end}}
 
         {{if $auth.Forward.TLS }}
         [frontends."frontend-{{ $service.ServiceName }}".auth.forward.tls]

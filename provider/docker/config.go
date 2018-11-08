@@ -33,13 +33,14 @@ func (p *Provider) buildConfiguration(containersInspected []dockerData) *types.C
 		"getDomain":        label.GetFuncString(label.TraefikDomain, p.Domain),
 
 		// Backend functions
-		"getIPAddress":      p.getDeprecatedIPAddress, // TODO: Should we expose getIPPort instead?
-		"getServers":        p.getServers,
-		"getMaxConn":        label.GetMaxConn,
-		"getHealthCheck":    label.GetHealthCheck,
-		"getBuffering":      label.GetBuffering,
-		"getCircuitBreaker": label.GetCircuitBreaker,
-		"getLoadBalancer":   label.GetLoadBalancer,
+		"getIPAddress":          p.getDeprecatedIPAddress, // TODO: Should we expose getIPPort instead?
+		"getServers":            p.getServers,
+		"getMaxConn":            label.GetMaxConn,
+		"getHealthCheck":        label.GetHealthCheck,
+		"getBuffering":          label.GetBuffering,
+		"getResponseForwarding": label.GetResponseForwarding,
+		"getCircuitBreaker":     label.GetCircuitBreaker,
+		"getLoadBalancer":       label.GetLoadBalancer,
 
 		// Frontend functions
 		"getBackendName":       getBackendName,
@@ -186,13 +187,16 @@ func (p *Provider) getFrontendRule(container dockerData, segmentLabels map[strin
 	}
 
 	domain := label.GetStringValue(segmentLabels, label.TraefikDomain, p.Domain)
+	if len(domain) > 0 {
+		domain = "." + domain
+	}
 
 	if values, err := label.GetStringMultipleStrict(container.Labels, labelDockerComposeProject, labelDockerComposeService); err == nil {
-		return "Host:" + getSubDomain(values[labelDockerComposeService]+"."+values[labelDockerComposeProject]) + "." + domain
+		return "Host:" + getSubDomain(values[labelDockerComposeService]+"."+values[labelDockerComposeProject]) + domain
 	}
 
 	if len(domain) > 0 {
-		return "Host:" + getSubDomain(container.ServiceName) + "." + domain
+		return "Host:" + getSubDomain(container.ServiceName) + domain
 	}
 
 	return ""
@@ -337,21 +341,22 @@ func (p *Provider) getPortBinding(container dockerData) (*nat.PortBinding, error
 
 func (p *Provider) getIPPort(container dockerData) (string, string, error) {
 	var ip, port string
+	usedBound := false
 
 	if p.UseBindPortIP {
 		portBinding, err := p.getPortBinding(container)
 		if err != nil {
-			return "", "", fmt.Errorf("unable to find a binding for the container %q: ignoring server", container.Name)
+			log.Infof("Unable to find a binding for container %q, falling back on its internal IP/Port.", container.Name)
+		} else if (portBinding.HostIP == "0.0.0.0") || (len(portBinding.HostIP) == 0) {
+			log.Infof("Cannot determine the IP address (got %q) for %q's binding, falling back on its internal IP/Port.", portBinding.HostIP, container.Name)
+		} else {
+			ip = portBinding.HostIP
+			port = portBinding.HostPort
+			usedBound = true
 		}
+	}
 
-		if portBinding.HostIP == "0.0.0.0" {
-			return "", "", fmt.Errorf("cannot determine the IP address (got 0.0.0.0) for the container %q: ignoring server", container.Name)
-		}
-
-		ip = portBinding.HostIP
-		port = portBinding.HostPort
-
-	} else {
+	if !usedBound {
 		ip = p.getIPAddress(container)
 		port = getPort(container)
 	}
@@ -359,6 +364,7 @@ func (p *Provider) getIPPort(container dockerData) (string, string, error) {
 	if len(ip) == 0 {
 		return "", "", fmt.Errorf("unable to find the IP address for the container %q: the server is ignored", container.Name)
 	}
+
 	return ip, port, nil
 }
 

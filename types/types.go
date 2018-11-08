@@ -23,12 +23,18 @@ import (
 
 // Backend holds backend configuration.
 type Backend struct {
-	Servers        map[string]Server `json:"servers,omitempty"`
-	CircuitBreaker *CircuitBreaker   `json:"circuitBreaker,omitempty"`
-	LoadBalancer   *LoadBalancer     `json:"loadBalancer,omitempty"`
-	MaxConn        *MaxConn          `json:"maxConn,omitempty"`
-	HealthCheck    *HealthCheck      `json:"healthCheck,omitempty"`
-	Buffering      *Buffering        `json:"buffering,omitempty"`
+	Servers            map[string]Server   `json:"servers,omitempty"`
+	CircuitBreaker     *CircuitBreaker     `json:"circuitBreaker,omitempty"`
+	LoadBalancer       *LoadBalancer       `json:"loadBalancer,omitempty"`
+	MaxConn            *MaxConn            `json:"maxConn,omitempty"`
+	HealthCheck        *HealthCheck        `json:"healthCheck,omitempty"`
+	Buffering          *Buffering          `json:"buffering,omitempty"`
+	ResponseForwarding *ResponseForwarding `json:"forwardingResponse,omitempty"`
+}
+
+// ResponseForwarding holds configuration for the forward of the response
+type ResponseForwarding struct {
+	FlushInterval string `json:"flushInterval,omitempty"`
 }
 
 // MaxConn holds maximum connection configuration
@@ -74,6 +80,7 @@ type HealthCheck struct {
 	Path     string            `json:"path,omitempty"`
 	Port     int               `json:"port,omitempty"`
 	Interval string            `json:"interval,omitempty"`
+	Timeout  string            `json:"timeout,omitempty"`
 	Hostname string            `json:"hostname,omitempty"`
 	Headers  map[string]string `json:"headers,omitempty"`
 }
@@ -400,6 +407,7 @@ type Users []string
 
 // Basic HTTP basic authentication
 type Basic struct {
+	Realm        string `json:"realm,omitempty"`
 	Users        `json:"users,omitempty" mapstructure:","`
 	UsersFile    string `json:"usersFile,omitempty"`
 	RemoveHeader bool   `json:"removeHeader,omitempty"`
@@ -528,7 +536,9 @@ func (clientTLS *ClientTLS) CreateTLSConfig() (*tls.Config, error) {
 		} else {
 			ca = []byte(clientTLS.CA)
 		}
-		caPool.AppendCertsFromPEM(ca)
+		if !caPool.AppendCertsFromPEM(ca) {
+			return nil, fmt.Errorf("failed to parse CA")
+		}
 		if clientTLS.CAOptional {
 			clientAuth = tls.VerifyClientCertIfGiven
 		} else {

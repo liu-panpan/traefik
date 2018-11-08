@@ -52,6 +52,7 @@ defaultEntryPoints = ["http", "https"]
       headerField = "X-WebAuth-User"
       [entryPoints.http.auth.basic]
         removeHeader = true
+        realm = "Your realm"
         users = [
           "test:$apr1$H6uskkkW$IgXLP6ewTrSuBkTrqE8wj/",
           "test2:$apr1$d9hr9HBB$4HxwgUir3HP4EsggP/QNo0",
@@ -143,6 +144,7 @@ ProxyProtocol.Insecure:true
 ForwardedHeaders.TrustedIPs:10.0.0.3/24,20.0.0.3/24
 Auth.Basic.Users:test:$apr1$H6uskkkW$IgXLP6ewTrSuBkTrqE8wj/,test2:$apr1$d9hr9HBB$4HxwgUir3HP4EsggP/QNo0
 Auth.Basic.Removeheader:true
+Auth.Basic.Realm:traefik
 Auth.Digest.Users:test:traefik:a2688e031edb4be6a3797f3882655c05,test2:traefik:518845800f9e2bfb1f1f740ec24f074e
 Auth.Digest.Removeheader:true
 Auth.HeaderField:X-WebAuth-User
@@ -243,8 +245,8 @@ If you need to add or remove TLS certificates while Traefik is started, Dynamic 
 ## TLS Mutual Authentication
 
 TLS Mutual Authentication can be `optional` or not.
-If it's `optional`, Træfik will authorize connection with certificates not signed by a specified Certificate Authority (CA).
-Otherwise, Træfik will only accept clients that present a certificate signed by a specified Certificate Authority (CA).
+If it's `optional`, Traefik will authorize connection with certificates not signed by a specified Certificate Authority (CA).
+Otherwise, Traefik will only accept clients that present a certificate signed by a specified Certificate Authority (CA).
 `ClientCA.files` can be configured with multiple `CA:s` in the same file or use multiple files containing one or several `CA:s`.
 The `CA:s` has to be in PEM format.
 
@@ -289,6 +291,18 @@ Users can be specified directly in the TOML file, or indirectly by referencing a
 ```
 
 Optionally, you can:
+
+- customize the realm
+
+```toml
+[entryPoints]
+  [entryPoints.http]
+  address = ":80"
+  [entryPoints.http.auth]
+    [entryPoints.http.auth.basic]
+    realm = "Your realm"
+    users = ["test:$apr1$H6uskkkW$IgXLP6ewTrSuBkTrqE8wj/", "test2:$apr1$d9hr9HBB$4HxwgUir3HP4EsggP/QNo0"]
+```
 
 - pass authenticated user to application via headers
 
@@ -580,7 +594,7 @@ To enable [ProxyProtocol](https://www.haproxy.org/download/1.8/doc/proxy-protoco
 Only IPs in `trustedIPs` will lead to remote client address replacement: you should declare your load-balancer IP or CIDR range here (in testing environment, you can trust everyone using `insecure = true`).
 
 !!! danger
-    When queuing Træfik behind another load-balancer, be sure to carefully configure Proxy Protocol on both sides.
+    When queuing Traefik behind another load-balancer, be sure to carefully configure Proxy Protocol on both sides.
     Otherwise, it could introduce a security risk in your system by forging requests.
 
 ```toml

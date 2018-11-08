@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/containous/flaeg/parse"
 	"github.com/containous/mux"
 	"github.com/containous/traefik/configuration"
 	"github.com/containous/traefik/healthcheck"
@@ -42,13 +43,7 @@ func (s *Server) loadConfiguration(configMsg types.ConfigMessage) {
 
 	s.metricsRegistry.ConfigReloadsCounter().Add(1)
 
-	newServerEntryPoints, err := s.loadConfig(newConfigurations, s.globalConfiguration)
-	if err != nil {
-		s.metricsRegistry.ConfigReloadsFailureCounter().Add(1)
-		s.metricsRegistry.LastConfigReloadFailureGauge().Set(float64(time.Now().Unix()))
-		log.Error("Error loading new configuration, aborted ", err)
-		return
-	}
+	newServerEntryPoints := s.loadConfig(newConfigurations, s.globalConfiguration)
 
 	s.metricsRegistry.LastConfigReloadSuccessGauge().Set(float64(time.Now().Unix()))
 
@@ -77,11 +72,7 @@ func (s *Server) loadConfiguration(configMsg types.ConfigMessage) {
 
 // loadConfig returns a new gorilla.mux Route from the specified global configuration and the dynamic
 // provider configurations.
-func (s *Server) loadConfig(configurations types.Configurations, globalConfiguration configuration.GlobalConfiguration) (map[string]*serverEntryPoint, error) {
-	redirectHandlers, err := s.buildEntryPointRedirect()
-	if err != nil {
-		return nil, err
-	}
+func (s *Server) loadConfig(configurations types.Configurations, globalConfiguration configuration.GlobalConfiguration) map[string]*serverEntryPoint {
 
 	serverEntryPoints := s.buildServerEntryPoints()
 
@@ -95,7 +86,7 @@ func (s *Server) loadConfig(configurations types.Configurations, globalConfigura
 
 		for _, frontendName := range frontendNames {
 			frontendPostConfigs, err := s.loadFrontendConfig(providerName, frontendName, config,
-				redirectHandlers, serverEntryPoints,
+				serverEntryPoints,
 				backendsHandlers, backendsHealthCheck)
 			if err != nil {
 				log.Errorf("%v. Skipping frontend %s...", err, frontendName)
@@ -118,8 +109,7 @@ func (s *Server) loadConfig(configurations types.Configurations, globalConfigura
 
 	// Get new certificates list sorted per entrypoints
 	// Update certificates
-	entryPointsCertificates, err := s.loadHTTPSConfiguration(configurations, globalConfiguration.DefaultEntryPoints)
-	// FIXME error management
+	entryPointsCertificates := s.loadHTTPSConfiguration(configurations, globalConfiguration.DefaultEntryPoints)
 
 	// Sort routes and update certificates
 	for serverEntryPointName, serverEntryPoint := range serverEntryPoints {
@@ -129,12 +119,12 @@ func (s *Server) loadConfig(configurations types.Configurations, globalConfigura
 		}
 	}
 
-	return serverEntryPoints, err
+	return serverEntryPoints
 }
 
 func (s *Server) loadFrontendConfig(
 	providerName string, frontendName string, config *types.Configuration,
-	redirectHandlers map[string]negroni.Handler, serverEntryPoints map[string]*serverEntryPoint,
+	serverEntryPoints map[string]*serverEntryPoint,
 	backendsHandlers map[string]http.Handler, backendsHealthCheck map[string]*healthcheck.BackendConfig,
 ) ([]handlerPostConfig, error) {
 
@@ -174,7 +164,7 @@ func (s *Server) loadFrontendConfig(
 				postConfigs = append(postConfigs, postConfig)
 			}
 
-			fwd, err := s.buildForwarder(entryPointName, entryPoint, frontendName, frontend, responseModifier)
+			fwd, err := s.buildForwarder(entryPointName, entryPoint, frontendName, frontend, responseModifier, backend)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create the forwarder for frontend %s: %v", frontendName, err)
 			}
@@ -184,15 +174,16 @@ func (s *Server) loadFrontendConfig(
 				return nil, err
 			}
 
+			// Handler used by error pages
+			if backendsHandlers[entryPointName+providerName+frontend.Backend] == nil {
+				backendsHandlers[entryPointName+providerName+frontend.Backend] = lb
+			}
+
 			if healthCheckConfig != nil {
 				backendsHealthCheck[entryPointName+providerName+frontendHash] = healthCheckConfig
 			}
 
 			n := negroni.New()
-
-			if _, exist := redirectHandlers[entryPointName]; exist {
-				n.Use(redirectHandlers[entryPointName])
-			}
 
 			for _, handler := range handlers {
 				n.Use(handler)
@@ -226,11 +217,19 @@ func (s *Server) loadFrontendConfig(
 
 func (s *Server) buildForwarder(entryPointName string, entryPoint *configuration.EntryPoint,
 	frontendName string, frontend *types.Frontend,
-	responseModifier modifyResponse) (http.Handler, error) {
+	responseModifier modifyResponse, backend *types.Backend) (http.Handler, error) {
 
 	roundTripper, err := s.getRoundTripper(entryPointName, frontend.PassTLSCert, entryPoint.TLS)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create RoundTripper for frontend %s: %v", frontendName, err)
+	}
+
+	var flushInterval parse.Duration
+	if backend.ResponseForwarding != nil {
+		err := flushInterval.Set(backend.ResponseForwarding.FlushInterval)
+		if err != nil {
+			return nil, fmt.Errorf("error creating flush interval for frontend %s: %v", frontendName, err)
+		}
 	}
 
 	var fwd http.Handler
@@ -240,6 +239,7 @@ func (s *Server) buildForwarder(entryPointName string, entryPoint *configuration
 		forward.RoundTripper(roundTripper),
 		forward.ResponseModifier(responseModifier),
 		forward.BufferPool(s.bufferPool),
+		forward.StreamingFlushInterval(time.Duration(flushInterval)),
 		forward.WebsocketConnectionClosedHook(func(req *http.Request, conn net.Conn) {
 			server := req.Context().Value(http.ServerContextKey).(*http.Server)
 			if server != nil {
@@ -530,17 +530,15 @@ func (s *Server) postLoadConfiguration() {
 }
 
 // loadHTTPSConfiguration add/delete HTTPS certificate managed dynamically
-func (s *Server) loadHTTPSConfiguration(configurations types.Configurations, defaultEntryPoints configuration.DefaultEntryPoints) (map[string]map[string]*tls.Certificate, error) {
+func (s *Server) loadHTTPSConfiguration(configurations types.Configurations, defaultEntryPoints configuration.DefaultEntryPoints) map[string]map[string]*tls.Certificate {
 	newEPCertificates := make(map[string]map[string]*tls.Certificate)
 	// Get all certificates
 	for _, config := range configurations {
 		if config.TLS != nil && len(config.TLS) > 0 {
-			if err := traefiktls.SortTLSPerEntryPoints(config.TLS, newEPCertificates, defaultEntryPoints); err != nil {
-				return nil, err
-			}
+			traefiktls.SortTLSPerEntryPoints(config.TLS, newEPCertificates, defaultEntryPoints)
 		}
 	}
-	return newEPCertificates, nil
+	return newEPCertificates
 }
 
 func (s *Server) buildServerEntryPoints() map[string]*serverEntryPoint {
@@ -562,16 +560,16 @@ func (s *Server) buildServerEntryPoints() map[string]*serverEntryPoint {
 			serverEntryPoints[entryPointName].certs.SniStrict = entryPoint.Configuration.TLS.SniStrict
 
 			if entryPoint.Configuration.TLS.DefaultCertificate != nil {
-				cert, err := tls.LoadX509KeyPair(entryPoint.Configuration.TLS.DefaultCertificate.CertFile.String(), entryPoint.Configuration.TLS.DefaultCertificate.KeyFile.String())
+				cert, err := buildDefaultCertificate(entryPoint.Configuration.TLS.DefaultCertificate)
 				if err != nil {
 					log.Error(err)
 					continue
 				}
-				serverEntryPoints[entryPointName].certs.DefaultCertificate = &cert
+				serverEntryPoints[entryPointName].certs.DefaultCertificate = cert
 			} else {
 				cert, err := generate.DefaultCertificate()
 				if err != nil {
-					log.Error(err)
+					log.Errorf("failed to generate default certificate: %v", err)
 					continue
 				}
 				serverEntryPoints[entryPointName].certs.DefaultCertificate = cert
@@ -587,10 +585,28 @@ func (s *Server) buildServerEntryPoints() map[string]*serverEntryPoint {
 	return serverEntryPoints
 }
 
+func buildDefaultCertificate(defaultCertificate *traefiktls.Certificate) (*tls.Certificate, error) {
+	certFile, err := defaultCertificate.CertFile.Read()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get cert file content: %v", err)
+	}
+
+	keyFile, err := defaultCertificate.KeyFile.Read()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get key file content: %v", err)
+	}
+
+	cert, err := tls.X509KeyPair(certFile, keyFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load X509 key pair: %v", err)
+	}
+	return &cert, nil
+}
+
 func (s *Server) buildDefaultHTTPRouter() *mux.Router {
 	rt := mux.NewRouter()
 	rt.NotFoundHandler = s.wrapHTTPHandlerWithAccessLog(http.HandlerFunc(http.NotFound), "backend not found")
-	rt.StrictSlash(true)
+	rt.StrictSlash(!s.globalConfiguration.KeepTrailingSlash)
 	rt.SkipClean(true)
 	return rt
 }

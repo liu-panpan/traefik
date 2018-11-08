@@ -49,6 +49,11 @@ func TestLoadIngresses(t *testing.T) {
 						onePath(iBackend("service7", intstr.FromInt(80))),
 					),
 				),
+				iRule(iHost(""),
+					iPaths(
+						onePath(iBackend("service8", intstr.FromInt(80))),
+					),
+				),
 			),
 		),
 	}
@@ -117,6 +122,14 @@ func TestLoadIngresses(t *testing.T) {
 				clusterIP("10.0.0.7"),
 				sPorts(sPort(80, ""))),
 		),
+		buildService(
+			sName("service8"),
+			sNamespace("testing"),
+			sUID("8"),
+			sSpec(
+				clusterIP("10.0.0.8"),
+				sPorts(sPort(80, ""))),
+		),
 	}
 
 	endpoints := []*corev1.Endpoints{
@@ -162,6 +175,14 @@ func TestLoadIngresses(t *testing.T) {
 			eUID("7"),
 			subset(
 				eAddresses(eAddress("10.10.0.7")),
+				ePorts(ePort(80, ""))),
+		),
+		buildEndpoint(
+			eNamespace("testing"),
+			eName("service8"),
+			eUID("8"),
+			subset(
+				eAddresses(eAddress("10.10.0.8")),
 				ePorts(ePort(80, ""))),
 		),
 	}
@@ -217,6 +238,12 @@ func TestLoadIngresses(t *testing.T) {
 					server("http://10.10.0.7:80", weight(1)),
 				),
 			),
+			backend("service8",
+				lbMethod("wrr"),
+				servers(
+					server("http://10.10.0.8:80", weight(1)),
+				),
+			),
 		),
 		frontends(
 			frontend("foo/bar",
@@ -246,6 +273,10 @@ func TestLoadIngresses(t *testing.T) {
 			frontend("*.service7",
 				passHostHeader(),
 				routes(route("*.service7", "HostRegexp:{subdomain:[A-Za-z0-9-_]+}.service7")),
+			),
+			frontend("service8",
+				passHostHeader(),
+				routes(route("/", "PathPrefix:/")),
 			),
 		),
 	)
@@ -696,6 +727,7 @@ func TestGetPassHostHeader(t *testing.T) {
 	assert.Equal(t, expected, actual)
 }
 
+// Deprecated
 func TestGetPassTLSCert(t *testing.T) {
 	ingresses := []*extensionsv1beta1.Ingress{
 		buildIngress(iNamespace("awesome"),
@@ -875,6 +907,9 @@ func TestServiceAnnotations(t *testing.T) {
 				iRule(
 					iHost("max-conn"),
 					iPaths(onePath(iBackend("service4", intstr.FromInt(804))))),
+				iRule(
+					iHost("flush"),
+					iPaths(onePath(iBackend("service5", intstr.FromInt(805))))),
 			),
 		),
 	}
@@ -924,6 +959,15 @@ retryexpression: IsNetworkError() && Attempts() <= 2
 				clusterIP("10.0.0.4"),
 				sPorts(sPort(804, "http"))),
 		),
+		buildService(
+			sName("service5"),
+			sNamespace("testing"),
+			sUID("5"),
+			sAnnotation(annotationKubernetesResponseForwardingFlushInterval, "10ms"),
+			sSpec(
+				clusterIP("10.0.0.5"),
+				sPorts(sPort(80, ""))),
+		),
 	}
 
 	endpoints := []*corev1.Endpoints{
@@ -971,6 +1015,17 @@ retryexpression: IsNetworkError() && Attempts() <= 2
 				eAddresses(eAddress("10.4.0.2")),
 				ePorts(ePort(8080, "http"))),
 		),
+		buildEndpoint(
+			eNamespace("testing"),
+			eName("service5"),
+			eUID("5"),
+			subset(
+				eAddresses(eAddress("10.4.0.1")),
+				ePorts(ePort(8080, "http"))),
+			subset(
+				eAddresses(eAddress("10.4.0.2")),
+				ePorts(ePort(8080, "http"))),
+		),
 	}
 
 	watchChan := make(chan interface{})
@@ -993,6 +1048,11 @@ retryexpression: IsNetworkError() && Attempts() <= 2
 					server("http://10.21.0.1:8080", weight(1))),
 				lbMethod("drr"),
 				circuitBreaker("NetworkErrorRatio() > 0.5"),
+			),
+			backend("flush",
+				servers(),
+				lbMethod("wrr"),
+				responseForwarding("10ms"),
 			),
 			backend("bar",
 				servers(
@@ -1039,6 +1099,10 @@ retryexpression: IsNetworkError() && Attempts() <= 2
 				passHostHeader(),
 				routes(
 					route("max-conn", "Host:max-conn"))),
+			frontend("flush",
+				passHostHeader(),
+				routes(
+					route("flush", "Host:flush"))),
 		),
 	)
 
@@ -1069,6 +1133,20 @@ func TestIngressAnnotations(t *testing.T) {
 		buildIngress(
 			iNamespace("testing"),
 			iAnnotation(annotationKubernetesPassTLSCert, "true"),
+			iAnnotation(annotationKubernetesPassTLSClientCert, `
+pem: true
+infos:
+  notafter: true
+  notbefore: true
+  sans: true
+  subject:
+    country: true
+    province: true
+    locality: true
+    organization: true
+    commonname: true
+    serialnumber: true
+`),
 			iAnnotation(annotationKubernetesIngressClass, traefikDefaultRealm),
 			iRules(
 				iRule(
@@ -1484,13 +1562,7 @@ rateset:
 			),
 			frontend("other/sslstuff",
 				passHostHeader(),
-				passTLSCert(),
-				routes(
-					route("/sslstuff", "PathPrefix:/sslstuff"),
-					route("other", "Host:other")),
-			),
-			frontend("other/sslstuff",
-				passHostHeader(),
+				passTLSClientCert(),
 				passTLSCert(),
 				routes(
 					route("/sslstuff", "PathPrefix:/sslstuff"),
@@ -1595,6 +1667,14 @@ rateset:
 				routes(
 					route("/", "PathPrefix:/"),
 					route("root", "Host:root"),
+				),
+			),
+			frontend("root2/",
+				passHostHeader(),
+				redirectRegex("root2/$", "root2/root2"),
+				routes(
+					route("/", "PathPrefix:/;ReplacePathRegex: ^/(.*) /abc$1"),
+					route("root2", "Host:root2"),
 				),
 			),
 			frontend("root/root1",
@@ -3456,4 +3536,139 @@ func TestAddGlobalBackendEndpointAPIError(t *testing.T) {
 	provider := Provider{}
 	err := provider.addGlobalBackend(client, ingresses, config)
 	assert.Error(t, err)
+}
+
+func TestTemplateBreakingIngresssValues(t *testing.T) {
+	ingresses := []*extensionsv1beta1.Ingress{
+		buildIngress(
+			iNamespace("testing"),
+			iAnnotation(annotationKubernetesIngressClass, "testing-\"foo\""),
+			iRules(
+				iRule(
+					iHost("foo"),
+					iPaths(onePath(iPath("/bar"), iBackend("service1", intstr.FromInt(80))))),
+			),
+		),
+		buildIngress(
+			iNamespace("testing"),
+			iRules(
+				iRule(
+					iHost("testing-\"foo\""),
+					iPaths(onePath(iPath("/bar"), iBackend("service1", intstr.FromInt(80))))),
+			),
+		),
+		buildIngress(
+			iNamespace("testing"),
+			iRules(
+				iRule(
+					iHost("foo"),
+					iPaths(onePath(iPath("/testing-\"foo\""), iBackend("service1", intstr.FromInt(80))))),
+			),
+		),
+	}
+
+	client := clientMock{
+		ingresses: ingresses,
+	}
+	provider := Provider{}
+
+	actual, err := provider.loadIngresses(client)
+	require.NoError(t, err, "error loading ingresses")
+
+	expected := buildConfiguration(
+		backends(),
+		frontends(),
+	)
+
+	assert.Equal(t, expected, actual)
+}
+
+func TestDivergingIngressDefinitions(t *testing.T) {
+	ingresses := []*extensionsv1beta1.Ingress{
+		buildIngress(
+			iNamespace("testing"),
+			iRules(
+				iRule(
+					iHost("host-a"),
+					iPaths(
+						onePath(iBackend("service1", intstr.FromString("80"))),
+					)),
+			),
+		),
+		buildIngress(
+			iNamespace("testing"),
+			iRules(
+				iRule(
+					iHost("host-a"),
+					iPaths(
+						onePath(iBackend("missing", intstr.FromString("80"))),
+					)),
+			),
+		),
+	}
+
+	services := []*corev1.Service{
+		buildService(
+			sName("service1"),
+			sNamespace("testing"),
+			sUID("1"),
+			sSpec(
+				clusterIP("10.0.0.1"),
+				sPorts(sPort(80, "http")),
+			),
+		),
+	}
+
+	endpoints := []*corev1.Endpoints{
+		buildEndpoint(
+			eNamespace("testing"),
+			eName("service1"),
+			eUID("1"),
+			subset(
+				eAddresses(
+					eAddress("10.10.0.1"),
+				),
+				ePorts(ePort(80, "http")),
+			),
+			subset(
+				eAddresses(
+					eAddress("10.10.0.2"),
+				),
+				ePorts(ePort(80, "http")),
+			),
+		),
+	}
+
+	watchChan := make(chan interface{})
+	client := clientMock{
+		ingresses: ingresses,
+		services:  services,
+		endpoints: endpoints,
+		watchChan: watchChan,
+	}
+	provider := Provider{}
+
+	actual, err := provider.loadIngresses(client)
+	require.NoError(t, err, "error loading ingresses")
+
+	expected := buildConfiguration(
+		backends(
+			backend("host-a",
+				servers(
+					server("http://10.10.0.1:80", weight(1)),
+					server("http://10.10.0.2:80", weight(1)),
+				),
+				lbMethod("wrr"),
+			),
+		),
+		frontends(
+			frontend("host-a",
+				passHostHeader(),
+				routes(
+					route("host-a", "Host:host-a")),
+			),
+		),
+	)
+
+	assert.Equal(t, expected, actual, "error merging multiple backends")
 }

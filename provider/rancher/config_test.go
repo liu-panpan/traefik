@@ -41,10 +41,12 @@ func TestProviderBuildConfiguration(t *testing.T) {
 						label.TraefikBackend: "foobar",
 
 						label.TraefikBackendCircuitBreakerExpression:         "NetworkErrorRatio() > 0.5",
+						label.TraefikBackendResponseForwardingFlushInterval:  "10ms",
 						label.TraefikBackendHealthCheckScheme:                "http",
 						label.TraefikBackendHealthCheckPath:                  "/health",
 						label.TraefikBackendHealthCheckPort:                  "880",
 						label.TraefikBackendHealthCheckInterval:              "6",
+						label.TraefikBackendHealthCheckTimeout:               "3",
 						label.TraefikBackendHealthCheckHostname:              "foo.com",
 						label.TraefikBackendHealthCheckHeaders:               "Foo:bar || Bar:foo",
 						label.TraefikBackendLoadBalancerMethod:               "drr",
@@ -280,6 +282,9 @@ func TestProviderBuildConfiguration(t *testing.T) {
 					CircuitBreaker: &types.CircuitBreaker{
 						Expression: "NetworkErrorRatio() > 0.5",
 					},
+					ResponseForwarding: &types.ResponseForwarding{
+						FlushInterval: "10ms",
+					},
 					LoadBalancer: &types.LoadBalancer{
 						Method: "drr",
 						Stickiness: &types.Stickiness{
@@ -295,6 +300,7 @@ func TestProviderBuildConfiguration(t *testing.T) {
 						Path:     "/health",
 						Port:     880,
 						Interval: "6",
+						Timeout:  "3",
 						Hostname: "foo.com",
 						Headers: map[string]string{
 							"Foo": "bar",
@@ -681,6 +687,7 @@ func TestProviderBuildConfiguration(t *testing.T) {
 						label.TraefikFrontendAuthForwardTLSKey:                "server.key",
 						label.TraefikFrontendAuthForwardTLSInsecureSkipVerify: "true",
 						label.TraefikFrontendAuthHeaderField:                  "X-WebAuth-User",
+						label.TraefikFrontendAuthForwardAuthResponseHeaders:   "X-Auth-User,X-Auth-Token",
 					},
 					Health:     "healthy",
 					Containers: []string{"127.0.0.1"},
@@ -694,8 +701,7 @@ func TestProviderBuildConfiguration(t *testing.T) {
 					Auth: &types.Auth{
 						HeaderField: "X-WebAuth-User",
 						Forward: &types.Forward{
-							Address:            "auth.server",
-							TrustForwardHeader: true,
+							Address: "auth.server",
 							TLS: &types.ClientTLS{
 								CA:                 "ca.crt",
 								CAOptional:         true,
@@ -703,6 +709,8 @@ func TestProviderBuildConfiguration(t *testing.T) {
 								Cert:               "server.crt",
 								Key:                "server.key",
 							},
+							TrustForwardHeader:  true,
+							AuthResponseHeaders: []string{"X-Auth-User", "X-Auth-Token"},
 						},
 					},
 					Priority: 0,

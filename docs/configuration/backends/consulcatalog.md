@@ -1,6 +1,6 @@
 # Consul Catalog Provider
 
-Træfik can be configured to use service discovery catalog of Consul as a provider.
+Traefik can be configured to use service discovery catalog of Consul as a provider.
 
 ```toml
 ################################################################
@@ -96,7 +96,7 @@ Additional settings can be defined using Consul Catalog tags.
 
 | Label                                                                | Description                                                                                                                                                                                                                   |
 |----------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `<prefix>.enable=false`                                              | Disables this container in Træfik.                                                                                                                                                                                            |
+| `<prefix>.enable=false`                                              | Disables this container in Traefik.                                                                                                                                                                                            |
 | `<prefix>.protocol=https`                                            | Overrides the default `http` protocol.                                                                                                                                                                                        |
 | `<prefix>.weight=10`                                                 | Assigns this weight to the container.                                                                                                                                                                                         |
 | `traefik.backend.buffering.maxRequestBodyBytes=0`                    | See [buffering](/configuration/commons/#buffering) section.                                                                                                                                                                   |
@@ -105,8 +105,10 @@ Additional settings can be defined using Consul Catalog tags.
 | `traefik.backend.buffering.memResponseBodyBytes=0`                   | See [buffering](/configuration/commons/#buffering) section.                                                                                                                                                                   |
 | `traefik.backend.buffering.retryExpression=EXPR`                     | See [buffering](/configuration/commons/#buffering) section.                                                                                                                                                                   |
 | `<prefix>.backend.circuitbreaker.expression=EXPR`                    | Creates a [circuit breaker](/basics/#backends) to be used against the backend. ex: `NetworkErrorRatio() > 0.`                                                                                                                 |
+| `<prefix>.backend.responseForwarding.flushInterval=10ms`             | Defines the interval between two flushes when forwarding response from backend to client.                                                                                                                                     |
 | `<prefix>.backend.healthcheck.path=/health`                          | Enables health check for the backend, hitting the container at `path`.                                                                                                                                                        |
-| `<prefix>.backend.healthcheck.interval=1s`                           | Defines the health check interval.                                                                                                                                                                                            |
+| `<prefix>.backend.healthcheck.interval=5s`                           | Defines the health check interval.                                                                                                                                                                                            |
+| `<prefix>.backend.healthcheck.timeout=3s`                            | Defines the health check request timeout                                                                                                                                                                                      |
 | `<prefix>.backend.healthcheck.port=8080`                             | Sets a different port for the health check.                                                                                                                                                                                   |
 | `traefik.backend.healthcheck.scheme=http`                            | Overrides the server URL scheme.                                                                                                                                                                                              |
 | `<prefix>.backend.healthcheck.hostname=foobar.com`                   | Defines the health check hostname.                                                                                                                                                                                            |
@@ -124,6 +126,7 @@ Additional settings can be defined using Consul Catalog tags.
 | `<prefix>.frontend.auth.digest.users=EXPR`                           | Sets digest authentication to this frontend in CSV format: `User:Realm:Hash,User:Realm:Hash`.                                                                                                                                 |
 | `<prefix>.frontend.auth.digest.usersfile=/path/.htdigest`            | Sets digest authentication with an external file; if users and usersFile are provided, both are merged, with external file contents having precedence.                                                                        |
 | `<prefix>.frontend.auth.forward.address=https://example.com`         | Sets the URL of the authentication server.                                                                                                                                                                                    |
+| `<prefix>.frontend.auth.forward.authResponseHeaders=EXPR`            | Sets the forward authentication authResponseHeaders in CSV format: `X-Auth-User,X-Auth-Header`                                                                                                                                |
 | `<prefix>.frontend.auth.forward.tls.ca=/path/ca.pem`                 | Sets the Certificate Authority (CA) for the TLS connection with the authentication server.                                                                                                                                    |
 | `<prefix>.frontend.auth.forward.tls.caOptional=true`                 | Checks the certificates if present but do not force to be signed by a specified Certificate Authority (CA).                                                                                                                   |
 | `<prefix>.frontend.auth.forward.tls.cert=/path/server.pem`           | Sets the Certificate for the TLS connection with the authentication server.                                                                                                                                                   |
@@ -200,7 +203,7 @@ If you need to support multiple frontends for a service, for example when having
 | `<prefix>.frontend.headers.frameDeny=false`               | Adds the `X-Frame-Options` header with the value of `DENY`.                                                                                                                                         |
 | `<prefix>.frontend.headers.hostsProxyHeaders=EXPR`        | Provides a list of headers that the proxied hostname may be stored.<br>Format: `HEADER1,HEADER2`                                                                                                    |
 | `<prefix>.frontend.headers.isDevelopment=false`           | This will cause the `AllowedHosts`, `SSLRedirect`, and `STSSeconds`/`STSIncludeSubdomains` options to be ignored during development.<br>When deploying to production, be sure to set this to false. |
-| `<prefix>.frontend.headers.publicKey=VALUE`               | Adds pinned HTST public key header.                                                                                                                                                                 |
+| `<prefix>.frontend.headers.publicKey=VALUE`               | Adds HPKP header.                                                                                                                                                                                   |
 | `<prefix>.frontend.headers.referrerPolicy=VALUE`          | Adds referrer policy  header.                                                                                                                                                                       |
 | `<prefix>.frontend.headers.SSLRedirect=true`              | Forces the frontend to redirect to SSL if a non-SSL request is sent.                                                                                                                                |
 | `<prefix>.frontend.headers.SSLTemporaryRedirect=true`     | Forces the frontend to redirect to SSL if a non-SSL request is sent, but by sending a 302 instead of a 301.                                                                                         |
@@ -214,7 +217,7 @@ If you need to support multiple frontends for a service, for example when having
 
 ### Examples
 
-If you want that Træfik uses Consul tags correctly you need to defined them like that:
+If you want that Traefik uses Consul tags correctly you need to defined them like that:
 
 ```js
 traefik.enable=true
@@ -222,7 +225,7 @@ traefik.tags=api
 traefik.tags=external
 ```
 
-If the prefix defined in Træfik configuration is `bla`, tags need to be defined like that:
+If the prefix defined in Traefik configuration is `bla`, tags need to be defined like that:
 
 ```js
 bla.enable=true

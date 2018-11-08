@@ -20,6 +20,13 @@
 #
 # checkNewVersion = false
 
+# Tells traefik whether it should keep the trailing slashes in the paths (e.g. /paths/) or redirect to the no trailing slash paths instead (/paths).
+#
+# Optional
+# Default: false
+#
+# keepTrailingSlash = false
+
 # Providers throttle duration.
 #
 # Optional
@@ -76,12 +83,31 @@ If you encounter 'too many open files' errors, you can either increase this valu
 - `defaultEntryPoints`: Entrypoints to be used by frontends that do not specify any entrypoint.  
 Each frontend can specify its own entrypoints.
 
+- `keepTrailingSlash`: Tells Træfik whether it should keep the trailing slashes that might be present in the paths of incoming requests (true), or if it should redirect to the slashless version of the URL (default behavior: false) 
+
+!!! note 
+    Beware that the value of `keepTrailingSlash` can have a significant impact on the way your frontend rules are interpreted.
+    The table below tries to sum up several behaviors depending on requests/configurations. 
+    The current default behavior is deprecated and kept for compatibility reasons. 
+    As a consequence, we encourage you to set `keepTrailingSlash` to true.
+    
+    | Incoming request     | keepTrailingSlash | Path:{value} | Behavior                              
+    |----------------------|-------------------|--------------|----------------------------|
+    | http://foo.com/path/ | false             | Path:/path/  | Proceeds with the request  |
+    | http://foo.com/path/ | false             | Path:/path   | 301 to http://foo.com/path |           
+    | http://foo.com/path  | false             | Path:/path/  | Proceeds with the request  |
+    | http://foo.com/path  | false             | Path:/path   | Proceeds with the request  |
+    | http://foo.com/path/ | true              | Path:/path/  | Proceeds with the request  |
+    | http://foo.com/path/ | true              | Path:/path   | 404                        |
+    | http://foo.com/path  | true              | Path:/path/  | 404                        |
+    | http://foo.com/path  | true              | Path:/path   | Proceeds with the request  |
+
 
 ## Constraints
 
-In a micro-service architecture, with a central service discovery, setting constraints limits Træfik scope to a smaller number of routes.
+In a micro-service architecture, with a central service discovery, setting constraints limits Traefik scope to a smaller number of routes.
 
-Træfik filters services according to service attributes/tags set in your providers.
+Traefik filters services according to service attributes/tags set in your providers.
 
 Supported filters:
 
@@ -202,7 +228,7 @@ These can "burst" up to 10 and 200 in each period respectively.
 ## Buffering
 
 In some cases request/buffering can be enabled for a specific backend.
-By enabling this, Træfik will read the entire request into memory (possibly buffering large requests into disk) and will reject requests that are over a specified limit.
+By enabling this, Traefik will read the entire request into memory (possibly buffering large requests into disk) and will reject requests that are over a specified limit.
 This may help services deal with large data (multipart/form-data for example) more efficiently and should minimise time spent when sending data to a backend server.
 
 For more information please check [oxy/buffer](http://godoc.org/github.com/vulcand/oxy/buffer) documentation.
@@ -241,19 +267,23 @@ Example configuration:
 # Enable custom health check options.
 [healthcheck]
 
-# Set the default health check interval.
+# Set the default health check interval and timeout.
 #
 # Optional
 # Default: "30s"
 #
 # interval = "30s"
+# timeout = "5s"
 ```
 
-- `interval` set the default health check interval.  
-Will only be effective if health check paths are defined.  
-Given provider-specific support, the value may be overridden on a per-backend basis.  
-Can be provided in a format supported by [time.ParseDuration](https://golang.org/pkg/time/#ParseDuration) or as raw values (digits).  
+- `interval` sets the default health check interval.
+- `timeout` sets the default health check request timeout.
+
+These options will only be effective if health check paths are defined.
+Given provider-specific support, the value may be overridden on a per-backend basis.
+Can be provided in a format supported by [time.ParseDuration](https://golang.org/pkg/time/#ParseDuration) or as raw values (digits).
 If no units are provided, the value is parsed assuming seconds.
+**Note:** the interval must be greater than the timeout. If configuration doesn't reflect this, the interval will be set to timeout + 1 second.
 
 ## Life Cycle
 

@@ -4,7 +4,7 @@ The tracing system allows developers to visualize call flows in their infrastruc
 
 We use [OpenTracing](http://opentracing.io). It is an open standard designed for distributed tracing.
 
-Træfik supports three tracing backends: Jaeger, Zipkin and DataDog.
+Traefik supports three tracing backends: Jaeger, Zipkin and DataDog.
 
 ## Jaeger
 
@@ -73,7 +73,7 @@ Træfik supports three tracing backends: Jaeger, Zipkin and DataDog.
 ```
 
 !!! warning
-    Træfik is only able to send data over compact thrift protocol to the [Jaeger agent](https://www.jaegertracing.io/docs/deployment/#agent).
+    Traefik is only able to send data over compact thrift protocol to the [Jaeger agent](https://www.jaegertracing.io/docs/deployment/#agent).
 
 ## Zipkin
 
@@ -100,7 +100,7 @@ Træfik supports three tracing backends: Jaeger, Zipkin and DataDog.
   spanNameLimit = 150
 
   [tracing.zipkin]
-    # Zipking HTTP endpoint used to send data
+    # Zipkin HTTP endpoint used to send data
     #
     # Default: "http://localhost:9411/api/v1/spans"
     #
@@ -112,17 +112,23 @@ Træfik supports three tracing backends: Jaeger, Zipkin and DataDog.
     #
     debug = false
 
-    # Use ZipKin SameSpan RPC style traces
+    # Use Zipkin SameSpan RPC style traces
     #
     # Default: false
     #
     sameSpan = false
 
-    # Use ZipKin 128 bit root span IDs
+    # Use Zipkin 128 bit root span IDs
     #
     # Default: true
     #
     id128Bit = true
+
+    # The rate between 0.0 and 1.0 of requests to trace.
+    #
+    # Default: 1.0
+    #
+    sampleRate = 0.2
 ```
 
 ## DataDog

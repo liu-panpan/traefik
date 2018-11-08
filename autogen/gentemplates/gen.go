@@ -64,6 +64,14 @@ var _templatesConsul_catalogTmpl = []byte(`[backends]
     expression = "{{ $circuitBreaker.Expression }}"
   {{end}}
 
+  {{ $responseForwarding := getResponseForwarding $service.TraefikLabels }}
+  {{if $responseForwarding }}
+  [backends."backend-{{ $backendName }}".responseForwarding]
+    flushInterval = "{{ $responseForwarding.FlushInterval }}"
+  {{end}}
+
+
+
   {{ $loadBalancer := getLoadBalancer $service.TraefikLabels }}
   {{if $loadBalancer }}
   [backends."backend-{{ $backendName }}".loadBalancer]
@@ -88,6 +96,7 @@ var _templatesConsul_catalogTmpl = []byte(`[backends]
     path = "{{ $healthCheck.Path }}"
     port = {{ $healthCheck.Port }}
     interval = "{{ $healthCheck.Interval }}"
+    timeout = "{{ $healthCheck.Timeout }}"
     hostname = "{{ $healthCheck.Hostname }}"
     {{if $healthCheck.Headers }}
     [backends."backend-{{ $backendName }}".healthCheck.headers]
@@ -161,6 +170,11 @@ var _templatesConsul_catalogTmpl = []byte(`[backends]
       [frontends."frontend-{{ $service.ServiceName }}".auth.forward]
         address = "{{ $auth.Forward.Address }}"
         trustForwardHeader = {{ $auth.Forward.TrustForwardHeader }}
+        {{if $auth.Forward.AuthResponseHeaders }}
+        authResponseHeaders = [{{range $auth.Forward.AuthResponseHeaders }}
+          "{{.}}",
+          {{end}}]
+        {{end}}
 
         {{if $auth.Forward.TLS }}
         [frontends."frontend-{{ $service.ServiceName }}".auth.forward.tls]
@@ -332,6 +346,12 @@ var _templatesDockerTmpl = []byte(`{{$backendServers := .Servers}}
     expression = "{{ $circuitBreaker.Expression }}"
   {{end}}
 
+  {{ $responseForwarding := getResponseForwarding $backend.SegmentLabels }}
+  {{if $responseForwarding }}
+  [backends."backend-{{ $backendName }}".responseForwarding]
+    flushInterval = "{{ $responseForwarding.FlushInterval }}"
+  {{end}}
+
   {{ $loadBalancer := getLoadBalancer $backend.SegmentLabels }}
   {{if $loadBalancer }}
     [backends."backend-{{ $backendName }}".loadBalancer]
@@ -356,6 +376,7 @@ var _templatesDockerTmpl = []byte(`{{$backendServers := .Servers}}
     path = "{{ $healthCheck.Path }}"
     port = {{ $healthCheck.Port }}
     interval = "{{ $healthCheck.Interval }}"
+    timeout = "{{ $healthCheck.Timeout }}"
     hostname = "{{ $healthCheck.Hostname }}"
     {{if $healthCheck.Headers }}
     [backends."backend-{{ $backendName }}".healthCheck.headers]
@@ -429,6 +450,11 @@ var _templatesDockerTmpl = []byte(`{{$backendServers := .Servers}}
       [frontends."frontend-{{ $frontendName }}".auth.forward]
         address = "{{ $auth.Forward.Address }}"
         trustForwardHeader = {{ $auth.Forward.TrustForwardHeader }}
+        {{if $auth.Forward.AuthResponseHeaders }}
+        authResponseHeaders = [{{range $auth.Forward.AuthResponseHeaders }}
+          "{{.}}",
+          {{end}}]
+        {{end}}
 
         {{if $auth.Forward.TLS }}
         [frontends."frontend-{{ $frontendName }}".auth.forward.tls]
@@ -442,6 +468,7 @@ var _templatesDockerTmpl = []byte(`{{$backendServers := .Servers}}
 
       {{if $auth.Basic }}
       [frontends."frontend-{{ $frontendName }}".auth.basic]
+        realm = "{{ $auth.Basic.Realm }}"
         removeHeader = {{ $auth.Basic.RemoveHeader }}
         {{if $auth.Basic.Users }}
         users = [{{range $auth.Basic.Users }}
@@ -600,6 +627,12 @@ var _templatesEcsTmpl = []byte(`[backends]
     expression = "{{ $circuitBreaker.Expression }}"
   {{end}}
 
+  {{ $responseForwarding := getResponseForwarding $firstInstance.SegmentLabels }}
+  {{if $responseForwarding }}
+  [backends."backend-{{ $serviceName }}".responseForwarding]
+    flushInterval = "{{ $responseForwarding.FlushInterval }}"
+  {{end}}
+
   {{ $loadBalancer := getLoadBalancer $firstInstance.SegmentLabels }}
   {{if $loadBalancer }}
   [backends."backend-{{ $serviceName }}".loadBalancer]
@@ -624,6 +657,7 @@ var _templatesEcsTmpl = []byte(`[backends]
     path = "{{ $healthCheck.Path }}"
     port = {{ $healthCheck.Port }}
     interval = "{{ $healthCheck.Interval }}"
+    timeout = "{{ $healthCheck.Timeout }}"
     hostname = "{{ $healthCheck.Hostname }}"
     {{if $healthCheck.Headers }}
     [backends."backend-{{ $serviceName }}".healthCheck.headers]
@@ -699,6 +733,11 @@ var _templatesEcsTmpl = []byte(`[backends]
       [frontends."frontend-{{ $frontendName }}".auth.forward]
         address = "{{ $auth.Forward.Address }}"
         trustForwardHeader = {{ $auth.Forward.TrustForwardHeader }}
+        {{if $auth.Forward.AuthResponseHeaders }}
+        authResponseHeaders = [{{range $auth.Forward.AuthResponseHeaders }}
+          "{{.}}",
+          {{end}}]
+        {{end}}
 
         {{if $auth.Forward.TLS }}
         [frontends."frontend-{{ $frontendName }}".auth.forward.tls]
@@ -910,6 +949,11 @@ var _templatesKubernetesTmpl = []byte(`[backends]
       expression = "{{ $backend.CircuitBreaker.Expression }}"
     {{end}}
 
+    {{if $backend.ResponseForwarding }}
+    [backends."{{ $backendName }}".responseForwarding]
+      flushInterval = "{{ $backend.responseForwarding.FlushInterval }}"
+    {{end}}
+
     [backends."{{ $backendName }}".loadBalancer]
       method = "{{ $backend.LoadBalancer.Method }}"
       {{if $backend.LoadBalancer.Stickiness }}
@@ -1036,6 +1080,28 @@ var _templatesKubernetesTmpl = []byte(`[backends]
         {{end}}
     {{end}}
 
+    {{if $frontend.PassTLSClientCert }}
+    [frontends."{{ $frontendName }}".passTLSClientCert]
+      pem = {{ $frontend.PassTLSClientCert.PEM }}
+      {{ $infos := $frontend.PassTLSClientCert.Infos }}
+      {{if $infos }}
+      [frontends."{{ $frontendName }}".passTLSClientCert.infos]
+        notAfter = {{ $infos.NotAfter   }}
+        notBefore = {{ $infos.NotBefore }}
+        sans = {{ $infos.Sans }}
+        {{ $subject := $infos.Subject }}
+        {{if $subject }}
+        [frontends."{{ $frontendName }}".passTLSClientCert.infos.subject]
+          country = {{ $subject.Country }}
+          province = {{ $subject.Province }}
+          locality = {{ $subject.Locality }}
+          organization = {{ $subject.Organization }}
+          commonName = {{ $subject.CommonName }}
+          serialNumber = {{ $subject.SerialNumber }}
+        {{end}}
+      {{end}}
+    {{end}}
+
   {{if $frontend.Headers }}
   [frontends."{{ $frontendName }}".headers]
     SSLRedirect = {{ $frontend.Headers.SSLRedirect }}
@@ -1127,6 +1193,12 @@ var _templatesKvTmpl = []byte(`[backends]
   [backends."{{ $backendName }}".circuitBreaker]
     expression = "{{ $circuitBreaker.Expression }}"
   {{end}}
+          
+  {{ $responseForwarding := getResponseForwarding $backend }}
+  {{if $responseForwarding }}
+  [backends."{{ $backendName }}".responseForwarding]
+    flushInterval = "{{ $responseForwarding.flushInterval }}"
+  {{end}}
 
   {{ $loadBalancer := getLoadBalancer $backend }}
   {{if $loadBalancer }}
@@ -1147,14 +1219,15 @@ var _templatesKvTmpl = []byte(`[backends]
 
   {{ $healthCheck := getHealthCheck $backend }}
   {{if $healthCheck }}
-  [backends.{{ $backendName }}.healthCheck]
+  [backends."{{ $backendName }}".healthCheck]
     scheme = "{{ $healthCheck.Scheme }}"
     path = "{{ $healthCheck.Path }}"
     port = {{ $healthCheck.Port }}
     interval = "{{ $healthCheck.Interval }}"
+    timeout = "{{ $healthCheck.Timeout }}"
     hostname = "{{ $healthCheck.Hostname }}"
     {{if $healthCheck.Headers }}
-    [backends.{{ $backendName }}.healthCheck.headers]
+    [backends."{{ $backendName }}".healthCheck.headers]
       {{range $k, $v := $healthCheck.Headers }}
       {{$k}} = "{{$v}}"
       {{end}}
@@ -1163,7 +1236,7 @@ var _templatesKvTmpl = []byte(`[backends]
 
   {{ $buffering := getBuffering $backend }}
   {{if $buffering }}
-  [backends.{{ $backendName }}.buffering]
+  [backends."{{ $backendName }}".buffering]
     maxRequestBodyBytes = {{ $buffering.MaxRequestBodyBytes }}
     memRequestBodyBytes = {{ $buffering.MemRequestBodyBytes }}
     maxResponseBodyBytes = {{ $buffering.MaxResponseBodyBytes }}
@@ -1225,6 +1298,11 @@ var _templatesKvTmpl = []byte(`[backends]
       [frontends."{{ $frontendName }}".auth.forward]
         address = "{{ $auth.Forward.Address }}"
         trustForwardHeader = {{ $auth.Forward.TrustForwardHeader }}
+        {{if $auth.Forward.AuthResponseHeaders }}
+        authResponseHeaders = [{{range $auth.Forward.AuthResponseHeaders }}
+          "{{.}}",
+          {{end}}]
+        {{end}}
 
         {{if $auth.Forward.TLS }}
         [frontends."{{ $frontendName }}".auth.forward.tls]
@@ -1412,6 +1490,12 @@ var _templatesMarathonTmpl = []byte(`{{ $apps := .Applications }}
     [backends."{{ $backendName }}".circuitBreaker]
       expression = "{{ $circuitBreaker.Expression }}"
     {{end}}
+          
+    {{ $responseForwarding := getResponseForwarding $app.SegmentLabels }}
+    {{if $responseForwarding }}
+    [backends."{{ $backendName }}".responseForwarding]
+      flushInterval = "{{ $responseForwarding.FlushInterval }}"
+    {{end}}
 
     {{ $loadBalancer := getLoadBalancer $app.SegmentLabels }}
     {{if $loadBalancer }}
@@ -1437,6 +1521,7 @@ var _templatesMarathonTmpl = []byte(`{{ $apps := .Applications }}
       path = "{{ $healthCheck.Path }}"
       port = {{ $healthCheck.Port }}
       interval = "{{ $healthCheck.Interval }}"
+      timeout = "{{ $healthCheck.Timeout }}"
       hostname = "{{ $healthCheck.Hostname }}"
       {{if $healthCheck.Headers }}
       [backends.{{ $backendName }}.healthCheck.headers]
@@ -1510,6 +1595,11 @@ var _templatesMarathonTmpl = []byte(`{{ $apps := .Applications }}
       [frontends."{{ $frontendName }}".auth.forward]
         address = "{{ $auth.Forward.Address }}"
         trustForwardHeader = {{ $auth.Forward.TrustForwardHeader }}
+        {{if $auth.Forward.AuthResponseHeaders }}
+        authResponseHeaders = [{{range $auth.Forward.AuthResponseHeaders }}
+          "{{.}}",
+          {{end}}]
+        {{end}}
 
         {{if $auth.Forward.TLS }}
         [frontends."{{ $frontendName }}".auth.forward.tls]
@@ -1683,6 +1773,12 @@ var _templatesMesosTmpl = []byte(`[backends]
     expression = "{{ $circuitBreaker.Expression }}"
   {{end}}
 
+  {{ $responseForwarding := getResponseForwarding $app.TraefikLabels }}
+  {{if $responseForwarding }}
+  [backends."backend-{{ $backendName }}".responseForwarding]
+    flushInterval = "{{ $responseForwarding.FlushInterval }}"
+  {{end}}
+
   {{ $loadBalancer := getLoadBalancer $app.TraefikLabels }}
   {{if $loadBalancer }}
     [backends."backend-{{ $backendName }}".loadBalancer]
@@ -1707,6 +1803,7 @@ var _templatesMesosTmpl = []byte(`[backends]
     path = "{{ $healthCheck.Path }}"
     port = {{ $healthCheck.Port }}
     interval = "{{ $healthCheck.Interval }}"
+    timeout = "{{ $healthCheck.Timeout }}"
     hostname = "{{ $healthCheck.Hostname }}"
     {{if $healthCheck.Headers }}
     [backends."backend-{{ $backendName }}".healthCheck.headers]
@@ -1780,6 +1877,11 @@ var _templatesMesosTmpl = []byte(`[backends]
       [frontends."frontend-{{ $frontendName }}".auth.forward]
         address = "{{ $auth.Forward.Address }}"
         trustForwardHeader = {{ $auth.Forward.TrustForwardHeader }}
+        {{if $auth.Forward.AuthResponseHeaders }}
+        authResponseHeaders = [{{range $auth.Forward.AuthResponseHeaders }}
+          "{{.}}",
+          {{end}}]
+        {{end}}
 
         {{if $auth.Forward.TLS }}
         [frontends."frontend-{{ $frontendName }}".auth.forward.tls]
@@ -1976,6 +2078,12 @@ var _templatesRancherTmpl = []byte(`{{ $backendServers := .Backends }}
     expression = "{{ $circuitBreaker.Expression }}"
   {{end}}
 
+  {{ $responseForwarding := getResponseForwarding $backend.SegmentLabels }}
+  {{if $responseForwarding }}
+  [backends."backend-{{ $backendName }}".responseForwarding]
+    flushInterval = "{{ $responseForwarding.FlushInterval }}"
+  {{end}}
+
   {{ $loadBalancer := getLoadBalancer $backend.SegmentLabels }}
   {{if $loadBalancer }}
     [backends."backend-{{ $backendName }}".loadBalancer]
@@ -2000,6 +2108,7 @@ var _templatesRancherTmpl = []byte(`{{ $backendServers := .Backends }}
     path = "{{ $healthCheck.Path }}"
     port = {{ $healthCheck.Port }}
     interval = "{{ $healthCheck.Interval }}"
+    timeout = "{{ $healthCheck.Timeout }}"
     hostname = "{{ $healthCheck.Hostname }}"
     {{if $healthCheck.Headers }}
     [backends."backend-{{ $backendName }}".healthCheck.headers]
@@ -2072,6 +2181,11 @@ var _templatesRancherTmpl = []byte(`{{ $backendServers := .Backends }}
       [frontends."frontend-{{ $frontendName }}".auth.forward]
         address = "{{ $auth.Forward.Address }}"
         trustForwardHeader = {{ $auth.Forward.TrustForwardHeader }}
+        {{if $auth.Forward.AuthResponseHeaders }}
+        authResponseHeaders = [{{range $auth.Forward.AuthResponseHeaders }}
+          "{{.}}",
+          {{end}}]
+        {{end}}
 
         {{if $auth.Forward.TLS }}
         [frontends."frontend-{{ $frontendName }}".auth.forward.tls]

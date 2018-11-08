@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"net/url"
 	"strings"
 
 	goauth "github.com/abbot/go-http-auth"
 	"github.com/containous/traefik/log"
+	"github.com/containous/traefik/middlewares/accesslog"
 	"github.com/containous/traefik/middlewares/tracing"
 	"github.com/containous/traefik/types"
 	"github.com/urfave/negroni"
@@ -45,8 +45,11 @@ func NewAuthenticator(authConfig *types.Auth, tracingMiddleware *tracing.Tracing
 		if err != nil {
 			return nil, err
 		}
-
-		basicAuth := goauth.NewBasicAuthenticator("traefik", authenticator.secretBasic)
+		realm := "traefik"
+		if authConfig.Basic.Realm != "" {
+			realm = authConfig.Basic.Realm
+		}
+		basicAuth := goauth.NewBasicAuthenticator(realm, authenticator.secretBasic)
 		tracingAuth.handler = createAuthBasicHandler(basicAuth, authConfig)
 		tracingAuth.name = "Auth Basic"
 		tracingAuth.clientSpanKind = false
@@ -86,7 +89,10 @@ func createAuthDigestHandler(digestAuth *goauth.DigestAuth, authConfig *types.Au
 			digestAuth.RequireAuth(w, r)
 		} else {
 			log.Debugf("Digest auth succeeded")
-			r.URL.User = url.User(username)
+
+			// set username in request context
+			r = accesslog.WithUserName(r, username)
+
 			if authConfig.HeaderField != "" {
 				r.Header[authConfig.HeaderField] = []string{username}
 			}
@@ -105,7 +111,10 @@ func createAuthBasicHandler(basicAuth *goauth.BasicAuth, authConfig *types.Auth)
 			basicAuth.RequireAuth(w, r)
 		} else {
 			log.Debugf("Basic auth succeeded")
-			r.URL.User = url.User(username)
+
+			// set username in request context
+			r = accesslog.WithUserName(r, username)
+
 			if authConfig.HeaderField != "" {
 				r.Header[authConfig.HeaderField] = []string{username}
 			}

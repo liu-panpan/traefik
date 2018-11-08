@@ -7,6 +7,12 @@
   [backends."{{ $backendName }}".circuitBreaker]
     expression = "{{ $circuitBreaker.Expression }}"
   {{end}}
+          
+  {{ $responseForwarding := getResponseForwarding $backend }}
+  {{if $responseForwarding }}
+  [backends."{{ $backendName }}".responseForwarding]
+    flushInterval = "{{ $responseForwarding.flushInterval }}"
+  {{end}}
 
   {{ $loadBalancer := getLoadBalancer $backend }}
   {{if $loadBalancer }}
@@ -27,14 +33,15 @@
 
   {{ $healthCheck := getHealthCheck $backend }}
   {{if $healthCheck }}
-  [backends.{{ $backendName }}.healthCheck]
+  [backends."{{ $backendName }}".healthCheck]
     scheme = "{{ $healthCheck.Scheme }}"
     path = "{{ $healthCheck.Path }}"
     port = {{ $healthCheck.Port }}
     interval = "{{ $healthCheck.Interval }}"
+    timeout = "{{ $healthCheck.Timeout }}"
     hostname = "{{ $healthCheck.Hostname }}"
     {{if $healthCheck.Headers }}
-    [backends.{{ $backendName }}.healthCheck.headers]
+    [backends."{{ $backendName }}".healthCheck.headers]
       {{range $k, $v := $healthCheck.Headers }}
       {{$k}} = "{{$v}}"
       {{end}}
@@ -43,7 +50,7 @@
 
   {{ $buffering := getBuffering $backend }}
   {{if $buffering }}
-  [backends.{{ $backendName }}.buffering]
+  [backends."{{ $backendName }}".buffering]
     maxRequestBodyBytes = {{ $buffering.MaxRequestBodyBytes }}
     memRequestBodyBytes = {{ $buffering.MemRequestBodyBytes }}
     maxResponseBodyBytes = {{ $buffering.MaxResponseBodyBytes }}
@@ -105,6 +112,11 @@
       [frontends."{{ $frontendName }}".auth.forward]
         address = "{{ $auth.Forward.Address }}"
         trustForwardHeader = {{ $auth.Forward.TrustForwardHeader }}
+        {{if $auth.Forward.AuthResponseHeaders }}
+        authResponseHeaders = [{{range $auth.Forward.AuthResponseHeaders }}
+          "{{.}}",
+          {{end}}]
+        {{end}}
 
         {{if $auth.Forward.TLS }}
         [frontends."{{ $frontendName }}".auth.forward.tls]
