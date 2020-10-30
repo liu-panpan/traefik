@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/containous/traefik/integration/try"
 	"github.com/go-check/check"
+	"github.com/traefik/traefik/v2/integration/try"
 	checker "github.com/vdemeester/shakers"
 )
 
@@ -48,9 +48,9 @@ func (s *TLSClientHeadersSuite) TestTLSClientHeaders(c *check.C) {
 	defer display(c)
 	err = cmd.Start()
 	c.Assert(err, checker.IsNil)
-	defer cmd.Process.Kill()
+	defer s.killCmd(cmd)
 
-	err = try.GetRequest("http://127.0.0.1:8080/api/providers", 2*time.Second, try.BodyContains("PathPrefix:/"))
+	err = try.GetRequest("http://127.0.0.1:8080/api/rawdata", 2*time.Second, try.BodyContains("PathPrefix(`/`)"))
 	c.Assert(err, checker.IsNil)
 
 	request, err := http.NewRequest(http.MethodGet, "https://127.0.0.1:8443", nil)

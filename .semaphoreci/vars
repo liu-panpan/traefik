@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-export REPO='containous/traefik'
+export REPO='traefik/traefik'
 
 if VERSION=$(git describe --exact-match --abbrev=0 --tags);
 then
@@ -10,7 +10,7 @@ else
   export VERSION=''
 fi
 
-export CODENAME=maroilles
+export CODENAME=picodon
 
 export N_MAKE_JOBS=2
 
@@ -24,8 +24,8 @@ function ci_retry {
     until [ $n -ge $NRETRY ]
     do
         "$@" && break
-        n=$[$n+1]
-        echo "$@ failed, attempt ${n}/${NRETRY}"
+        n=$((n+1))
+        echo "${*} failed, attempt ${n}/${NRETRY}"
         sleep $NSLEEP
     done
 
@@ -34,4 +34,3 @@ function ci_retry {
 }
 
 export -f ci_retry
-

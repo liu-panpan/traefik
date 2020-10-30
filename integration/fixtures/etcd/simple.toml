@@ -1,18 +1,16 @@
-defaultEntryPoints = ["http"]
+[global]
+  checkNewVersion = false
+  sendAnonymousUsage = false
 
-logLevel = "DEBUG"
+[log]
+  level = "DEBUG"
 
-[entryPoints]
-  [entryPoints.http]
+[entryPoints.web]
   address = ":8000"
-  [entryPoints.api]
-  address = ":8081"
-
-
-[etcd]
-  endpoint = "{{.EtcdHost}}:2379"
-  prefix = "/traefik"
-  watch = true
 
 [api]
-  entryPoint = "api"
+  insecure = true
+
+[providers.etcd]
+  rootKey = "traefik"
+  endpoints = ["{{ .EtcdAddress }}"]

@@ -1,29 +1,37 @@
-defaultEntryPoints = ["https"]
+[global]
+  checkNewVersion = false
+  sendAnonymousUsage = false
 
-rootCAs = [ """{{ .CertContent }}""" ]
+[log]
+  level = "DEBUG"
+
+[serversTransport]
+  rootCAs = [ """{{ .CertContent }}""" ]
 
 [entryPoints]
-  [entryPoints.https]
-  address = ":4443"
-    [entryPoints.https.tls]
-     [[entryPoints.https.tls.certificates]]
-     certFile = """{{ .CertContent }}"""
-     keyFile  = """{{ .KeyContent }}"""
-
+  [entryPoints.websecure]
+    address = ":4443"
 
 [api]
+  insecure = true
 
-[file]
+[providers.file]
+  filename = "{{ .SelfFilename }}"
 
-[backends]
-  [backends.backend1]
-    [backends.backend1.servers.server1]
-    url = "https://127.0.0.1:{{ .GRPCServerPort }}"
-    weight = 1
+## dynamic configuration ##
 
+[http.routers]
+  [http.routers.router1]
+    rule = "Host(`127.0.0.1`)"
+    service = "service1"
+    [http.routers.router1.tls]
 
-[frontends]
-  [frontends.frontend1]
-  backend = "backend1"
-    [frontends.frontend1.routes.test_1]
-    rule = "Host:127.0.0.1"
+[http.services]
+  [http.services.service1.loadBalancer]
+    [[http.services.service1.loadBalancer.servers]]
+      url = "https://127.0.0.1:{{ .GRPCServerPort }}"
+
+[tls.stores]
+  [tls.stores.default.defaultCertificate]
+    certFile = """{{ .CertContent }}"""
+    keyFile  = """{{ .KeyContent }}"""

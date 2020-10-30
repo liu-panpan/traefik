@@ -1,28 +1,17 @@
 ################################################################
-# Global configuration
+#
+# Configuration sample for Traefik v2.
+#
+# For Traefik v1: https://github.com/traefik/traefik/blob/v1.7/traefik.sample.toml
+#
 ################################################################
 
-# Enable debug mode
-#
-# Optional
-# Default: false
-#
-# debug = true
-
-# Log level
-#
-# Optional
-# Default: "ERROR"
-#
-# logLevel = "DEBUG"
-
-# Entrypoints to be used by frontends that do not specify any entrypoint.
-# Each frontend can specify its own entrypoints.
-#
-# Optional
-# Default: ["http"]
-#
-# defaultEntryPoints = ["http", "https"]
+################################################################
+# Global configuration
+################################################################
+[global]
+  checkNewVersion = true
+  sendAnonymousUsage = true
 
 ################################################################
 # Entrypoints configuration
@@ -33,8 +22,11 @@
 # Optional
 # Default:
 [entryPoints]
-    [entryPoints.http]
+  [entryPoints.web]
     address = ":80"
+
+  [entryPoints.websecure]
+    address = ":443"
 
 ################################################################
 # Traefik logs configuration
@@ -45,22 +37,29 @@
 #
 # Optional
 #
-# [traefikLog]
+[log]
 
-# Sets the filepath for the traefik log. If not specified, stdout will be used.
-# Intermediate directories are created if necessary.
-#
-# Optional
-# Default: os.Stdout
-#
-# filePath = "log/traefik.log"
+  # Log level
+  #
+  # Optional
+  # Default: "ERROR"
+  #
+  # level = "DEBUG"
 
-# Format is either "json" or "common".
-#
-# Optional
-# Default: "common"
-#
-# format = "common"
+  # Sets the filepath for the traefik log. If not specified, stdout will be used.
+  # Intermediate directories are created if necessary.
+  #
+  # Optional
+  # Default: os.Stdout
+  #
+  # filePath = "log/traefik.log"
+
+  # Format is either "json" or "common".
+  #
+  # Optional
+  # Default: "common"
+  #
+  # format = "json"
 
 ################################################################
 # Access logs configuration
@@ -74,20 +73,20 @@
 #
 # [accessLog]
 
-# Sets the file path for the access log. If not specified, stdout will be used.
-# Intermediate directories are created if necessary.
-#
-# Optional
-# Default: os.Stdout
-#
-# filePath = "/path/to/log/log.txt"
+  # Sets the file path for the access log. If not specified, stdout will be used.
+  # Intermediate directories are created if necessary.
+  #
+  # Optional
+  # Default: os.Stdout
+  #
+  # filePath = "/path/to/log/log.txt"
 
-# Format is either "json" or "common".
-#
-# Optional
-# Default: "common"
-#
-# format = "common"
+  # Format is either "json" or "common".
+  #
+  # Optional
+  # Default: "common"
+  #
+  # format = "json"
 
 ################################################################
 # API and dashboard configuration
@@ -96,12 +95,12 @@
 # Enable API and dashboard
 [api]
 
-  # Name of the related entry point
+  # Enable the API in insecure mode
   #
   # Optional
-  # Default: "traefik"
+  # Default: false
   #
-  # entryPoint = "traefik"
+  # insecure = true
 
   # Enabled Dashboard
   #
@@ -129,26 +128,25 @@
 ################################################################
 
 # Enable Docker configuration backend
-[docker]
+[providers.docker]
 
-# Docker server endpoint. Can be a tcp or a unix socket endpoint.
-#
-# Required
-# Default: "unix:///var/run/docker.sock"
-#
-# endpoint = "tcp://10.10.10.10:2375"
+  # Docker server endpoint. Can be a tcp or a unix socket endpoint.
+  #
+  # Required
+  # Default: "unix:///var/run/docker.sock"
+  #
+  # endpoint = "tcp://10.10.10.10:2375"
 
-# Default domain used.
-# Can be overridden by setting the "traefik.domain" label on a container.
-#
-# Optional
-# Default: ""
-#
-# domain = "docker.localhost"
+  # Default host rule.
+  #
+  # Optional
+  # Default: "Host(`{{ normalize .Name }}`)"
+  #
+  # defaultRule = "Host(`{{ normalize .Name }}.docker.localhost`)"
 
-# Expose containers by default in traefik
-#
-# Optional
-# Default: true
-#
-# exposedByDefault = true
+  # Expose containers by default in traefik
+  #
+  # Optional
+  # Default: true
+  #
+  # exposedByDefault = false

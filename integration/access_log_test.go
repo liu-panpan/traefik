@@ -8,13 +8,14 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/containous/traefik/integration/try"
-	"github.com/containous/traefik/log"
-	"github.com/containous/traefik/middlewares/accesslog"
 	"github.com/go-check/check"
+	"github.com/traefik/traefik/v2/integration/try"
+	"github.com/traefik/traefik/v2/pkg/log"
+	"github.com/traefik/traefik/v2/pkg/middlewares/accesslog"
 	checker "github.com/vdemeester/shakers"
 )
 
@@ -23,15 +24,15 @@ const (
 	traefikTestAccessLogFile = "access.log"
 )
 
-// AccessLogSuite
+// AccessLogSuite tests suite.
 type AccessLogSuite struct{ BaseSuite }
 
 type accessLogValue struct {
-	formatOnly   bool
-	code         string
-	user         string
-	frontendName string
-	backendURL   string
+	formatOnly bool
+	code       string
+	user       string
+	routerName string
+	serviceURL string
 }
 
 func (s *AccessLogSuite) SetUpSuite(c *check.C) {
@@ -46,7 +47,7 @@ func (s *AccessLogSuite) SetUpSuite(c *check.C) {
 
 func (s *AccessLogSuite) TearDownTest(c *check.C) {
 	displayTraefikLogFile(c, traefikTestLogFile)
-	os.Remove(traefikTestAccessLogFile)
+	_ = os.Remove(traefikTestAccessLogFile)
 }
 
 func (s *AccessLogSuite) TestAccessLog(c *check.C) {
@@ -56,9 +57,15 @@ func (s *AccessLogSuite) TestAccessLog(c *check.C) {
 	cmd, display := s.traefikCmd(withConfigFile("fixtures/access_log_config.toml"))
 	defer display(c)
 
+	defer func() {
+		traefikLog, err := ioutil.ReadFile(traefikTestLogFile)
+		c.Assert(err, checker.IsNil)
+		log.WithoutContext().Info(string(traefikLog))
+	}()
+
 	err := cmd.Start()
 	c.Assert(err, checker.IsNil)
-	defer cmd.Process.Kill()
+	defer s.killCmd(cmd)
 
 	waitForTraefik(c, "server1")
 
@@ -98,11 +105,25 @@ func (s *AccessLogSuite) TestAccessLogAuthFrontend(c *check.C) {
 
 	expected := []accessLogValue{
 		{
-			formatOnly:   false,
-			code:         "401",
-			user:         "-",
-			frontendName: "Auth for frontend-Host-frontend-auth-docker-local",
-			backendURL:   "/",
+			formatOnly: false,
+			code:       "401",
+			user:       "-",
+			routerName: "rt-authFrontend",
+			serviceURL: "-",
+		},
+		{
+			formatOnly: false,
+			code:       "401",
+			user:       "test",
+			routerName: "rt-authFrontend",
+			serviceURL: "-",
+		},
+		{
+			formatOnly: false,
+			code:       "200",
+			user:       "test",
+			routerName: "rt-authFrontend",
+			serviceURL: "http://172.17.0",
 		},
 	}
 
@@ -112,7 +133,7 @@ func (s *AccessLogSuite) TestAccessLogAuthFrontend(c *check.C) {
 
 	err := cmd.Start()
 	c.Assert(err, checker.IsNil)
-	defer cmd.Process.Kill()
+	defer s.killCmd(cmd)
 
 	checkStatsForLogFile(c)
 
@@ -123,7 +144,7 @@ func (s *AccessLogSuite) TestAccessLogAuthFrontend(c *check.C) {
 	// Verify Traefik started OK
 	checkTraefikStarted(c)
 
-	// Test auth frontend
+	// Test auth entrypoint
 	req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1:8006/", nil)
 	c.Assert(err, checker.IsNil)
 	req.Host = "frontend.auth.docker.local"
@@ -131,96 +152,11 @@ func (s *AccessLogSuite) TestAccessLogAuthFrontend(c *check.C) {
 	err = try.Request(req, 500*time.Millisecond, try.StatusCodeIs(http.StatusUnauthorized), try.HasBody())
 	c.Assert(err, checker.IsNil)
 
-	// Verify access.log output as expected
-	count := checkAccessLogExactValuesOutput(c, expected)
-
-	c.Assert(count, checker.GreaterOrEqualThan, len(expected))
-
-	// Verify no other Traefik problems
-	checkNoOtherTraefikProblems(c)
-}
-
-func (s *AccessLogSuite) TestAccessLogAuthEntrypoint(c *check.C) {
-	ensureWorkingDirectoryIsClean()
-
-	expected := []accessLogValue{
-		{
-			formatOnly:   false,
-			code:         "401",
-			user:         "-",
-			frontendName: "Auth for entrypoint",
-			backendURL:   "/",
-		},
-	}
-
-	// Start Traefik
-	cmd, display := s.traefikCmd(withConfigFile("fixtures/access_log_config.toml"))
-	defer display(c)
-
-	err := cmd.Start()
-	c.Assert(err, checker.IsNil)
-	defer cmd.Process.Kill()
-
-	checkStatsForLogFile(c)
-
-	s.composeProject.Container(c, "authEntrypoint")
-
-	waitForTraefik(c, "authEntrypoint")
-
-	// Verify Traefik started OK
-	checkTraefikStarted(c)
-
-	// Test auth entrypoint
-	req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1:8004/", nil)
-	c.Assert(err, checker.IsNil)
-	req.Host = "entrypoint.auth.docker.local"
+	req.SetBasicAuth("test", "")
 
 	err = try.Request(req, 500*time.Millisecond, try.StatusCodeIs(http.StatusUnauthorized), try.HasBody())
 	c.Assert(err, checker.IsNil)
 
-	// Verify access.log output as expected
-	count := checkAccessLogExactValuesOutput(c, expected)
-
-	c.Assert(count, checker.GreaterOrEqualThan, len(expected))
-
-	// Verify no other Traefik problems
-	checkNoOtherTraefikProblems(c)
-}
-
-func (s *AccessLogSuite) TestAccessLogAuthEntrypointSuccess(c *check.C) {
-	ensureWorkingDirectoryIsClean()
-
-	expected := []accessLogValue{
-		{
-			formatOnly:   false,
-			code:         "200",
-			user:         "test",
-			frontendName: "Host-entrypoint-auth-docker",
-			backendURL:   "http://172.17.0",
-		},
-	}
-
-	// Start Traefik
-	cmd, display := s.traefikCmd(withConfigFile("fixtures/access_log_config.toml"))
-	defer display(c)
-
-	err := cmd.Start()
-	c.Assert(err, checker.IsNil)
-	defer cmd.Process.Kill()
-
-	checkStatsForLogFile(c)
-
-	s.composeProject.Container(c, "authEntrypoint")
-
-	waitForTraefik(c, "authEntrypoint")
-
-	// Verify Traefik started OK
-	checkTraefikStarted(c)
-
-	// Test auth entrypoint
-	req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1:8004/", nil)
-	c.Assert(err, checker.IsNil)
-	req.Host = "entrypoint.auth.docker.local"
 	req.SetBasicAuth("test", "test")
 
 	err = try.Request(req, 500*time.Millisecond, try.StatusCodeIs(http.StatusOK), try.HasBody())
@@ -235,23 +171,30 @@ func (s *AccessLogSuite) TestAccessLogAuthEntrypointSuccess(c *check.C) {
 	checkNoOtherTraefikProblems(c)
 }
 
-func (s *AccessLogSuite) TestAccessLogDigestAuthEntrypoint(c *check.C) {
+func (s *AccessLogSuite) TestAccessLogDigestAuthMiddleware(c *check.C) {
 	ensureWorkingDirectoryIsClean()
 
 	expected := []accessLogValue{
 		{
-			formatOnly:   false,
-			code:         "401",
-			user:         "-",
-			frontendName: "Auth for entrypoint",
-			backendURL:   "/",
+			formatOnly: false,
+			code:       "401",
+			user:       "-",
+			routerName: "rt-digestAuthMiddleware",
+			serviceURL: "-",
 		},
 		{
-			formatOnly:   false,
-			code:         "200",
-			user:         "test",
-			frontendName: "Host-entrypoint-digest-auth-docker",
-			backendURL:   "http://172.17.0",
+			formatOnly: false,
+			code:       "401",
+			user:       "test",
+			routerName: "rt-digestAuthMiddleware",
+			serviceURL: "-",
+		},
+		{
+			formatOnly: false,
+			code:       "200",
+			user:       "test",
+			routerName: "rt-digestAuthMiddleware",
+			serviceURL: "http://172.17.0",
 		},
 	}
 
@@ -261,13 +204,13 @@ func (s *AccessLogSuite) TestAccessLogDigestAuthEntrypoint(c *check.C) {
 
 	err := cmd.Start()
 	c.Assert(err, checker.IsNil)
-	defer cmd.Process.Kill()
+	defer s.killCmd(cmd)
 
 	checkStatsForLogFile(c)
 
-	s.composeProject.Container(c, "digestAuthEntrypoint")
+	s.composeProject.Container(c, "digestAuthMiddleware")
 
-	waitForTraefik(c, "digestAuthEntrypoint")
+	waitForTraefik(c, "digestAuthMiddleware")
 
 	// Verify Traefik started OK
 	checkTraefikStarted(c)
@@ -280,14 +223,21 @@ func (s *AccessLogSuite) TestAccessLogDigestAuthEntrypoint(c *check.C) {
 	resp, err := try.ResponseUntilStatusCode(req, 500*time.Millisecond, http.StatusUnauthorized)
 	c.Assert(err, checker.IsNil)
 
-	digestParts := digestParts(resp)
-	digestParts["uri"] = "/"
-	digestParts["method"] = http.MethodGet
-	digestParts["username"] = "test"
-	digestParts["password"] = "test"
+	digest := digestParts(resp)
+	digest["uri"] = "/"
+	digest["method"] = http.MethodGet
+	digest["username"] = "test"
+	digest["password"] = "wrong"
 
-	req.Header.Set("Authorization", getDigestAuthorization(digestParts))
+	req.Header.Set("Authorization", getDigestAuthorization(digest))
 	req.Header.Set("Content-Type", "application/json")
+
+	err = try.Request(req, 500*time.Millisecond, try.StatusCodeIs(http.StatusUnauthorized), try.HasBody())
+	c.Assert(err, checker.IsNil)
+
+	digest["password"] = "test"
+
+	req.Header.Set("Authorization", getDigestAuthorization(digest))
 
 	err = try.Request(req, 500*time.Millisecond, try.StatusCodeIs(http.StatusOK), try.HasBody())
 	c.Assert(err, checker.IsNil)
@@ -322,7 +272,7 @@ func digestParts(resp *http.Response) map[string]string {
 func getMD5(data string) string {
 	digest := md5.New()
 	if _, err := digest.Write([]byte(data)); err != nil {
-		log.Error(err)
+		log.WithoutContext().Error(err)
 	}
 	return fmt.Sprintf("%x", digest.Sum(nil))
 }
@@ -330,7 +280,7 @@ func getMD5(data string) string {
 func getCnonce() string {
 	b := make([]byte, 8)
 	if _, err := io.ReadFull(rand.Reader, b); err != nil {
-		log.Error(err)
+		log.WithoutContext().Error(err)
 	}
 	return fmt.Sprintf("%x", b)[:16]
 }
@@ -347,66 +297,16 @@ func getDigestAuthorization(digestParts map[string]string) string {
 	return authorization
 }
 
-func (s *AccessLogSuite) TestAccessLogEntrypointRedirect(c *check.C) {
-	ensureWorkingDirectoryIsClean()
-
-	expected := []accessLogValue{
-		{
-			formatOnly:   false,
-			code:         "302",
-			user:         "-",
-			frontendName: "entrypoint redirect for httpRedirect",
-			backendURL:   "/",
-		},
-		{
-			formatOnly: true,
-		},
-	}
-
-	// Start Traefik
-	cmd, display := s.traefikCmd(withConfigFile("fixtures/access_log_config.toml"))
-	defer display(c)
-
-	err := cmd.Start()
-	c.Assert(err, checker.IsNil)
-	defer cmd.Process.Kill()
-
-	checkStatsForLogFile(c)
-
-	s.composeProject.Container(c, "entrypointRedirect")
-
-	waitForTraefik(c, "entrypointRedirect")
-
-	// Verify Traefik started OK
-	checkTraefikStarted(c)
-
-	// Test entrypoint redirect
-	req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1:8001/test", nil)
-	c.Assert(err, checker.IsNil)
-	req.Host = ""
-
-	err = try.Request(req, 500*time.Millisecond, try.StatusCodeIs(http.StatusOK), try.HasBody())
-	c.Assert(err, checker.IsNil)
-
-	// Verify access.log output as expected
-	count := checkAccessLogExactValuesOutput(c, expected)
-
-	c.Assert(count, checker.GreaterOrEqualThan, len(expected))
-
-	// Verify no other Traefik problems
-	checkNoOtherTraefikProblems(c)
-}
-
 func (s *AccessLogSuite) TestAccessLogFrontendRedirect(c *check.C) {
 	ensureWorkingDirectoryIsClean()
 
 	expected := []accessLogValue{
 		{
-			formatOnly:   false,
-			code:         "302",
-			user:         "-",
-			frontendName: "frontend redirect for frontend-Path-",
-			backendURL:   "/",
+			formatOnly: false,
+			code:       "302",
+			user:       "-",
+			routerName: "rt-frontendRedirect",
+			serviceURL: "-",
 		},
 		{
 			formatOnly: true,
@@ -419,7 +319,7 @@ func (s *AccessLogSuite) TestAccessLogFrontendRedirect(c *check.C) {
 
 	err := cmd.Start()
 	c.Assert(err, checker.IsNil)
-	defer cmd.Process.Kill()
+	defer s.killCmd(cmd)
 
 	checkStatsForLogFile(c)
 
@@ -458,11 +358,11 @@ func (s *AccessLogSuite) TestAccessLogRateLimit(c *check.C) {
 			formatOnly: true,
 		},
 		{
-			formatOnly:   false,
-			code:         "429",
-			user:         "-",
-			frontendName: "rate limit for frontend-Host-ratelimit",
-			backendURL:   "/",
+			formatOnly: false,
+			code:       "429",
+			user:       "-",
+			routerName: "rt-rateLimit",
+			serviceURL: "-",
 		},
 	}
 
@@ -472,7 +372,7 @@ func (s *AccessLogSuite) TestAccessLogRateLimit(c *check.C) {
 
 	err := cmd.Start()
 	c.Assert(err, checker.IsNil)
-	defer cmd.Process.Kill()
+	defer s.killCmd(cmd)
 
 	checkStatsForLogFile(c)
 
@@ -509,11 +409,11 @@ func (s *AccessLogSuite) TestAccessLogBackendNotFound(c *check.C) {
 
 	expected := []accessLogValue{
 		{
-			formatOnly:   false,
-			code:         "404",
-			user:         "-",
-			frontendName: "backend not found",
-			backendURL:   "/",
+			formatOnly: false,
+			code:       "404",
+			user:       "-",
+			routerName: "-",
+			serviceURL: "-",
 		},
 	}
 
@@ -523,7 +423,7 @@ func (s *AccessLogSuite) TestAccessLogBackendNotFound(c *check.C) {
 
 	err := cmd.Start()
 	c.Assert(err, checker.IsNil)
-	defer cmd.Process.Kill()
+	defer s.killCmd(cmd)
 
 	waitForTraefik(c, "server1")
 
@@ -549,63 +449,16 @@ func (s *AccessLogSuite) TestAccessLogBackendNotFound(c *check.C) {
 	checkNoOtherTraefikProblems(c)
 }
 
-func (s *AccessLogSuite) TestAccessLogEntrypointWhitelist(c *check.C) {
-	ensureWorkingDirectoryIsClean()
-
-	expected := []accessLogValue{
-		{
-			formatOnly:   false,
-			code:         "403",
-			user:         "-",
-			frontendName: "ipwhitelister for entrypoint httpWhitelistReject",
-			backendURL:   "/",
-		},
-	}
-
-	// Start Traefik
-	cmd, display := s.traefikCmd(withConfigFile("fixtures/access_log_config.toml"))
-	defer display(c)
-
-	err := cmd.Start()
-	c.Assert(err, checker.IsNil)
-	defer cmd.Process.Kill()
-
-	checkStatsForLogFile(c)
-
-	s.composeProject.Container(c, "entrypointWhitelist")
-
-	waitForTraefik(c, "entrypointWhitelist")
-
-	// Verify Traefik started OK
-	checkTraefikStarted(c)
-
-	// Test rate limit
-	req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1:8002/", nil)
-	c.Assert(err, checker.IsNil)
-	req.Host = "entrypoint.whitelist.docker.local"
-
-	err = try.Request(req, 500*time.Millisecond, try.StatusCodeIs(http.StatusForbidden), try.HasBody())
-	c.Assert(err, checker.IsNil)
-
-	// Verify access.log output as expected
-	count := checkAccessLogExactValuesOutput(c, expected)
-
-	c.Assert(count, checker.GreaterOrEqualThan, len(expected))
-
-	// Verify no other Traefik problems
-	checkNoOtherTraefikProblems(c)
-}
-
 func (s *AccessLogSuite) TestAccessLogFrontendWhitelist(c *check.C) {
 	ensureWorkingDirectoryIsClean()
 
 	expected := []accessLogValue{
 		{
-			formatOnly:   false,
-			code:         "403",
-			user:         "-",
-			frontendName: "ipwhitelister for frontend-Host-frontend-whitelist",
-			backendURL:   "/",
+			formatOnly: false,
+			code:       "403",
+			user:       "-",
+			routerName: "rt-frontendWhitelist",
+			serviceURL: "-",
 		},
 	}
 
@@ -615,7 +468,7 @@ func (s *AccessLogSuite) TestAccessLogFrontendWhitelist(c *check.C) {
 
 	err := cmd.Start()
 	c.Assert(err, checker.IsNil)
-	defer cmd.Process.Kill()
+	defer s.killCmd(cmd)
 
 	checkStatsForLogFile(c)
 
@@ -648,11 +501,11 @@ func (s *AccessLogSuite) TestAccessLogAuthFrontendSuccess(c *check.C) {
 
 	expected := []accessLogValue{
 		{
-			formatOnly:   false,
-			code:         "200",
-			user:         "test",
-			frontendName: "Host-frontend-auth-docker",
-			backendURL:   "http://172.17.0",
+			formatOnly: false,
+			code:       "200",
+			user:       "test",
+			routerName: "rt-authFrontend",
+			serviceURL: "http://172.17.0",
 		},
 	}
 
@@ -662,7 +515,7 @@ func (s *AccessLogSuite) TestAccessLogAuthFrontendSuccess(c *check.C) {
 
 	err := cmd.Start()
 	c.Assert(err, checker.IsNil)
-	defer cmd.Process.Kill()
+	defer s.killCmd(cmd)
 
 	checkStatsForLogFile(c)
 
@@ -716,8 +569,7 @@ func checkAccessLogExactValuesOutput(c *check.C, values []accessLogValue) int {
 	lines := extractLines(c)
 	count := 0
 	for i, line := range lines {
-		fmt.Printf(line)
-		fmt.Println()
+		fmt.Println(line)
 		if len(line) > 0 {
 			count++
 			if values[i].formatOnly {
@@ -733,14 +585,22 @@ func checkAccessLogExactValuesOutput(c *check.C, values []accessLogValue) int {
 func extractLines(c *check.C) []string {
 	accessLog, err := ioutil.ReadFile(traefikTestAccessLogFile)
 	c.Assert(err, checker.IsNil)
+
 	lines := strings.Split(string(accessLog), "\n")
-	return lines
+
+	var clean []string
+	for _, line := range lines {
+		if !strings.Contains(line, "/api/rawdata") {
+			clean = append(clean, line)
+		}
+	}
+	return clean
 }
 
 func checkStatsForLogFile(c *check.C) {
 	err := try.Do(1*time.Second, func() error {
 		if _, errStat := os.Stat(traefikTestLogFile); errStat != nil {
-			return fmt.Errorf("could not get stats for log file: %s", errStat)
+			return fmt.Errorf("could not get stats for log file: %w", errStat)
 		}
 		return nil
 	})
@@ -767,9 +627,10 @@ func CheckAccessLogFormat(c *check.C, line string, i int) {
 	c.Assert(err, checker.IsNil)
 	c.Assert(results, checker.HasLen, 14)
 	c.Assert(results[accesslog.OriginStatus], checker.Matches, `^(-|\d{3})$`)
-	c.Assert(results[accesslog.RequestCount], checker.Equals, fmt.Sprintf("%d", i+1))
-	c.Assert(results[accesslog.FrontendName], checker.HasPrefix, "\"Host-")
-	c.Assert(results[accesslog.BackendURL], checker.HasPrefix, "\"http://")
+	count, _ := strconv.Atoi(results[accesslog.RequestCount])
+	c.Assert(count, checker.GreaterOrEqualThan, i+1)
+	c.Assert(results[accesslog.RouterName], checker.Matches, `"(rt-.+@docker|api@internal)"`)
+	c.Assert(results[accesslog.ServiceURL], checker.HasPrefix, `"http://`)
 	c.Assert(results[accesslog.Duration], checker.Matches, `^\d+ms$`)
 }
 
@@ -781,15 +642,18 @@ func checkAccessLogExactValues(c *check.C, line string, i int, v accessLogValue)
 		c.Assert(results[accesslog.ClientUsername], checker.Equals, v.user)
 	}
 	c.Assert(results[accesslog.OriginStatus], checker.Equals, v.code)
-	c.Assert(results[accesslog.RequestCount], checker.Equals, fmt.Sprintf("%d", i+1))
-	c.Assert(results[accesslog.FrontendName], checker.Matches, `^"?`+v.frontendName+`.*$`)
-	c.Assert(results[accesslog.BackendURL], checker.Matches, `^"?`+v.backendURL+`.*$`)
+	count, _ := strconv.Atoi(results[accesslog.RequestCount])
+	c.Assert(count, checker.GreaterOrEqualThan, i+1)
+	c.Assert(results[accesslog.RouterName], checker.Matches, `^"?`+v.routerName+`.*(@docker)?$`)
+	c.Assert(results[accesslog.ServiceURL], checker.Matches, `^"?`+v.serviceURL+`.*$`)
 	c.Assert(results[accesslog.Duration], checker.Matches, `^\d+ms$`)
 }
 
 func waitForTraefik(c *check.C, containerName string) {
+	time.Sleep(1 * time.Second)
+
 	// Wait for Traefik to turn ready.
-	req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1:8080/api", nil)
+	req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1:8080/api/rawdata", nil)
 	c.Assert(err, checker.IsNil)
 
 	err = try.Request(req, 2*time.Second, try.StatusCodeIs(http.StatusOK), try.BodyContains(containerName))

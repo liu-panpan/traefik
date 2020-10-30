@@ -1,17 +1,16 @@
-[backends]
-  [backends.backend]
-    [backends.backend.servers.server1]
-    url = "http://127.0.0.1:9010"
-    weight = 1
+[http.services]
+  [http.services.test.loadBalancer]
+    [[http.services.test.loadBalancer.servers]]
+      url = "http://127.0.0.1:9010"
 
-[frontends]
-  [frontends.frontend]
-  backend = "backend"
-    [frontends.frontend.routes.test]
-    rule = "Host:traefik.acme.wtf"
+[http.routers]
+  [http.routers.test]
+    entryPoints = ["websecure"]
+    rule = "Host(`traefik.acme.wtf`)"
+    service = "test"
+    [http.routers.test.tls]
 
-[[tls]]
-entryPoints = ["https"]
-  [tls.certificate]
+[[tls.certificates]]
+  stores = ["default"]
   certFile = "fixtures/acme/ssl/wildcard.crt"
   keyFile = "fixtures/acme/ssl/wildcard.key"

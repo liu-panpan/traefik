@@ -1,27 +1,37 @@
-defaultEntryPoints = ["http"]
+[global]
+  checkNewVersion = false
+  sendAnonymousUsage = false
 
-logLevel = "DEBUG"
+[log]
+  level = "DEBUG"
 
 [entryPoints]
-  [entryPoints.http]
-  address = ":8000"
+  [entryPoints.web]
+    address = ":8000"
 
 [api]
+  insecure = true
 
-[retry]
+[providers.file]
+  filename = "{{ .SelfFilename }}"
 
-[file]
-[backends]
-  [backends.backend1]
-    [backends.backend1.servers.server1]
-    url = "http://{{.WhoamiEndpoint}}:8080" # not valid
-    weight = 1
-    [backends.backend1.servers.server2]
-    url = "http://{{.WhoamiEndpoint}}:80"
-    weight = 1
+## dynamic configuration ##
 
-[frontends]
-  [frontends.frontend1]
-  backend = "backend1"
-    [frontends.frontend1.routes.test_1]
-    rule = "PathPrefix:/"
+[http.routers]
+  [http.routers.router1]
+    service = "service1"
+    middlewares = [ "retry" ]
+    rule = "PathPrefix(`/`)"
+
+[http.middlewares.retry.retry]
+  attempts = 3
+
+[http.services]
+  [http.services.service1]
+    [http.services.service1.loadBalancer]
+
+      [[http.services.service1.loadBalancer.servers]]
+        url = "http://{{.WhoamiEndpoint}}:8080"
+
+      [[http.services.service1.loadBalancer.servers]]
+        url = "http://{{.WhoamiEndpoint}}:80"

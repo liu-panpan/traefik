@@ -6,10 +6,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/containous/traefik/integration/try"
-	"github.com/containous/traefik/provider/label"
 	"github.com/gambol99/go-marathon"
 	"github.com/go-check/check"
+	"github.com/traefik/traefik/v2/integration/try"
 	checker "github.com/vdemeester/shakers"
 )
 
@@ -18,7 +17,7 @@ const (
 	containerNameMarathon   = "marathon"
 )
 
-// Marathon test suites (using libcompose)
+// Marathon test suites (using libcompose).
 type MarathonSuite struct {
 	BaseSuite
 	marathonURL string
@@ -61,7 +60,7 @@ func (s *MarathonSuite) extendDockerHostsFile(host, ipAddr string) error {
 	// (See also https://groups.google.com/d/topic/docker-user/JOGE7AnJ3Gw/discussion.)
 	if os.Getenv("CONTAINER") == "DOCKER" {
 		// We are running inside a container -- extend the hosts file.
-		file, err := os.OpenFile(hostsFile, os.O_APPEND|os.O_WRONLY, 0600)
+		file, err := os.OpenFile(hostsFile, os.O_APPEND|os.O_WRONLY, 0o600)
 		if err != nil {
 			return err
 		}
@@ -92,7 +91,7 @@ func (s *MarathonSuite) TestConfigurationUpdate(c *check.C) {
 	defer display(c)
 	err := cmd.Start()
 	c.Assert(err, checker.IsNil)
-	defer cmd.Process.Kill()
+	defer s.killCmd(cmd)
 
 	// Wait for Traefik to turn ready.
 	err = try.GetRequest("http://127.0.0.1:8000/", 2*time.Second, try.StatusCodeIs(http.StatusNotFound))
@@ -109,10 +108,10 @@ func (s *MarathonSuite) TestConfigurationUpdate(c *check.C) {
 		Name("/whoami").
 		CPU(0.1).
 		Memory(32).
-		AddLabel(label.TraefikFrontendRule, "PathPrefix:/service")
+		AddLabel("traefik.http.Routers.rt.Rule", "PathPrefix(`/service`)")
 	app.Container.Docker.Bridged().
 		Expose(80).
-		Container("emilevauge/whoami")
+		Container("traefik/whoami")
 
 	// Deploy the test application.
 	deployApplication(c, client, app)
@@ -126,10 +125,10 @@ func (s *MarathonSuite) TestConfigurationUpdate(c *check.C) {
 		Name("/whoami").
 		CPU(0.1).
 		Memory(32).
-		AddLabel(label.Prefix+"app"+label.TraefikFrontendRule, "PathPrefix:/app")
+		AddLabel("traefik.http.Routers.app.Rule", "PathPrefix(`/app`)")
 	app.Container.Docker.Bridged().
 		Expose(80).
-		Container("emilevauge/whoami")
+		Container("traefik/whoami")
 
 	// Deploy the test application.
 	deployApplication(c, client, app)

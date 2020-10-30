@@ -1,18 +1,21 @@
-logLevel = "DEBUG"
+[global]
+  checkNewVersion = false
+  sendAnonymousUsage = false
 
-defaultEntryPoints = ["https"]
+[log]
+  level = "DEBUG"
 
 [entryPoints]
-  [entryPoints.https]
-  address = ":4443"
-  [entryPoints.https.tls]
+  [entryPoints.websecure]
+     address = ":4443"
+
   [entryPoints.https02]
-  address = ":8443"
-  [entryPoints.https02.tls]
+     address = ":8443"
 
 [api]
+  insecure = true
 
-[file]
-
-fileName = "{{.DynamicConfFileName}}"
-watch = true
+[providers]
+  [providers.file]
+    fileName = "{{.DynamicConfFileName}}"
+    watch = true

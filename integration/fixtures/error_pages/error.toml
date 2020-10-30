@@ -1,30 +1,37 @@
-defaultEntryPoints = ["http"]
+[global]
+  checkNewVersion = false
+  sendAnonymousUsage = false
 
-logLevel = "DEBUG"
+[log]
+  level = "DEBUG"
 
 [entryPoints]
-  [entryPoints.http]
-  address = ":8080"
+  [entryPoints.web]
+    address = ":8080"
 
-[file]
-[backends]
-  [backends.backend1]
-    [backends.backend1.servers.server1]
-    url = "http://{{.Server1}}:8989474"
-    weight = 1
-  [backends.error]
-    [backends.error.servers.error]
-    url = "http://{{.Server2}}:80"
-    weight = 1
+[providers.file]
+  filename = "{{ .SelfFilename }}"
 
-[frontends]
-  [frontends.frontend1]
-  passHostHeader = true
-  backend = "backend1"
-  [frontends.frontend1.routes.test_1]
-  rule = "Host:test.local"
-  [frontends.frontend1.errors]
-    [frontends.frontend1.errors.networks]
+## dynamic configuration ##
+
+[http.routers]
+  [http.routers.router1]
+    rule = "Host(`test.local`)"
+    service = "service1"
+    middlewares = ["error"]
+
+[http.middlewares]
+  [http.middlewares.error.errors]
     status = ["500-502", "503-599"]
-    backend = "error"
+    service = "error"
     query = "/50x.html"
+
+[http.services]
+  [http.services.service1.loadBalancer]
+    passHostHeader = true
+    [[http.services.service1.loadBalancer.servers]]
+      url = "http://{{.Server1}}:8989474"
+
+  [http.services.error.loadBalancer]
+    [[http.services.error.loadBalancer.servers]]
+      url = "http://{{.Server2}}:80"

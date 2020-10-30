@@ -1,27 +1,33 @@
-defaultEntryPoints = ["http"]
+[global]
+  checkNewVersion = false
+  sendAnonymousUsage = false
 
-logLevel = "DEBUG"
+[log]
+  level = "DEBUG"
 
 [entryPoints]
-  [entryPoints.http]
-  address = ":8000"
+  [entryPoints.web]
+    address = ":8000"
 
 [api]
+  insecure = true
 
-[file]
-[backends]
-  [backends.backend1]
-    [backends.backend1.healthcheck]
-    path = "/health"
-    port = 80
-    interval = "1s"
-    timeout = "0.9s"
-    [backends.backend1.servers.server1]
-    url = "http://{{.Server1}}:81"
-    weight = 1
+[providers.file]
+  filename = "{{ .SelfFilename }}"
 
-[frontends]
-  [frontends.frontend1]
-  backend = "backend1"
-    [frontends.frontend1.routes.test_1]
-    rule = "Host:test.localhost"
+## dynamic configuration ##
+
+[http.routers]
+  [http.routers.router1]
+    service = "service1"
+    rule = "Host(`test.localhost`)"
+
+[http.services]
+  [http.services.service1.loadBalancer]
+    [http.services.service1.loadBalancer.healthcheck]
+      path = "/health"
+      port = 80
+      interval = "1s"
+      timeout = "0.9s"
+    [[http.services.service1.loadBalancer.servers]]
+      url = "http://{{.Server1}}:81"

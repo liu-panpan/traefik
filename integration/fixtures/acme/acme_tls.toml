@@ -1,56 +1,56 @@
-logLevel = "DEBUG"
+[global]
+  checkNewVersion = false
+  sendAnonymousUsage = false
 
-defaultEntryPoints = ["http", "https"]
+[log]
+  level = "DEBUG"
 
 [entryPoints]
-  [entryPoints.http]
-  address = "{{ .PortHTTP }}"
-  [entryPoints.https]
-  address = "{{ .PortHTTPS }}"
-    [entryPoints.https.tls]
-      [[entryPoints.https.tls.certificates]]
-      certFile = "fixtures/acme/ssl/wildcard.crt"
-      keyFile = "fixtures/acme/ssl/wildcard.key"
+  [entryPoints.web]
+    address = "{{ .PortHTTP }}"
+  [entryPoints.websecure]
+    address = "{{ .PortHTTPS }}"
 
-[acme]
+{{range $name, $resolvers := .Acme }}
+
+[certificatesResolvers.{{ $name }}.acme]
   email = "test@traefik.io"
   storage = "/tmp/acme.json"
-  entryPoint = "https"
-  acmeLogging = true
-  onDemand = {{ .Acme.OnDemand }}
-  onHostRule = {{ .Acme.OnHostRule }}
-  keyType = "{{ .Acme.KeyType }}"
-  caServer = "{{ .Acme.CAServer }}"
+  keyType = "{{ $resolvers.ACME.KeyType }}"
+  caServer = "{{ $resolvers.ACME.CAServer }}"
 
-  {{if .Acme.HTTPChallenge }}
-  [acme.httpChallenge]
-    entryPoint = "{{ .Acme.HTTPChallenge.EntryPoint }}"
+  {{if $resolvers.ACME.HTTPChallenge }}
+  [certificatesResolvers.{{ $name }}.acme.httpChallenge]
+    entryPoint = "{{ $resolvers.ACME.HTTPChallenge.EntryPoint }}"
   {{end}}
 
-  {{if .Acme.TLSChallenge }}
-  [acme.tlsChallenge]
+  {{if $resolvers.ACME.TLSChallenge }}
+  [certificatesResolvers.{{ $name }}.acme.tlsChallenge]
   {{end}}
 
-  {{range .Acme.Domains}}
-  [[acme.domains]]
-    main = "{{ .Main }}"
-    sans = [{{range .SANs }}
-      "{{.}}",
-      {{end}}]
-  {{end}}
+{{end}}
 
 [api]
+  insecure = true
 
-[file]
+[providers.file]
+  filename = "{{ .SelfFilename }}"
 
-[backends]
-  [backends.backend]
-    [backends.backend.servers.server1]
-    url = "http://127.0.0.1:9010"
-    weight = 1
+## dynamic configuration ##
 
-[frontends]
-  [frontends.frontend]
-  backend = "backend"
-    [frontends.frontend.routes.test]
-    rule = "Host:traefik.acme.wtf"
+[http.services]
+  [http.services.test.loadBalancer]
+    [[http.services.test.loadBalancer.servers]]
+      url = "http://127.0.0.1:9010"
+
+[http.routers]
+  [http.routers.test]
+    entryPoints = ["websecure"]
+    rule = "Host(`traefik.acme.wtf`)"
+    service = "test"
+    [http.routers.test.tls]
+
+[tls.stores]
+  [tls.stores.default.defaultCertificate]
+    certFile = "fixtures/acme/ssl/wildcard.crt"
+    keyFile = "fixtures/acme/ssl/wildcard.key"

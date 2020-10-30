@@ -7,8 +7,8 @@ import (
 	"runtime"
 	"text/template"
 
-	"github.com/containous/flaeg"
-	"github.com/containous/traefik/version"
+	"github.com/traefik/paerser/cli"
+	"github.com/traefik/traefik/v2/pkg/version"
 )
 
 var versionTemplate = `Version:      {{.Version}}
@@ -17,25 +17,23 @@ Go version:   {{.GoVersion}}
 Built:        {{.BuildTime}}
 OS/Arch:      {{.Os}}/{{.Arch}}`
 
-// NewCmd builds a new Version command
-func NewCmd() *flaeg.Command {
-	return &flaeg.Command{
-		Name:                  "version",
-		Description:           `Print version`,
-		Config:                struct{}{},
-		DefaultPointersConfig: struct{}{},
-		Run: func() error {
+// NewCmd builds a new Version command.
+func NewCmd() *cli.Command {
+	return &cli.Command{
+		Name:          "version",
+		Description:   `Shows the current Traefik version.`,
+		Configuration: nil,
+		Run: func(_ []string) error {
 			if err := GetPrint(os.Stdout); err != nil {
 				return err
 			}
 			fmt.Print("\n")
 			return nil
-
 		},
 	}
 }
 
-// GetPrint write Printable version
+// GetPrint write Printable version.
 func GetPrint(wr io.Writer) error {
 	tmpl, err := template.New("").Parse(versionTemplate)
 	if err != nil {

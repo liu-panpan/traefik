@@ -1,27 +1,33 @@
-defaultEntryPoints = ["http"]
+[global]
+  checkNewVersion = false
+  sendAnonymousUsage = false
 
-debug=true
+[log]
+  level = "DEBUG"
 
 [entryPoints]
-  [entryPoints.http]
-  address = ":8000"
+  [entryPoints.web]
+    address = ":8000"
 
 [api]
+  insecure = true
 
-[docker]
-endpoint = "unix:///var/run/docker.sock"
-watch = true
-exposedByDefault = false
+[providers]
+  [providers.docker]
+    watch = true
+    exposedByDefault = false
 
-[file]
-  [frontends]
-  [frontends.frontend-1]
-    backend = "backend-test"
-  [frontends.frontend-1.routes.test_1]
-  rule = "PathPrefix:/file"
+  [providers.file]
+    filename = "{{ .SelfFilename }}"
 
-  [backends]
-    [backends.backend-test]
-        [backends.backend-test.servers.website]
-        url = "http://{{ .IP }}"
-        weight = 1
+## dynamic configuration ##
+
+[http.routers]
+  [http.routers.router-1]
+    service = "service-test"
+    rule = "PathPrefix(`/file`)"
+
+[http.services]
+  [http.services.service-test.loadBalancer]
+    [[http.services.service-test.loadBalancer.servers]]
+      url = "http://{{ .IP }}"

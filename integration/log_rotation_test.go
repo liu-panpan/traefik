@@ -7,15 +7,16 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"strings"
 	"syscall"
 	"time"
 
-	"github.com/containous/traefik/integration/try"
 	"github.com/go-check/check"
+	"github.com/traefik/traefik/v2/integration/try"
 	checker "github.com/vdemeester/shakers"
 )
 
-// Log rotation integration test suite
+// Log rotation integration test suite.
 type LogRotationSuite struct{ BaseSuite }
 
 func (s *LogRotationSuite) SetUpSuite(c *check.C) {
@@ -33,7 +34,7 @@ func (s *LogRotationSuite) TestAccessLogRotation(c *check.C) {
 
 	err := cmd.Start()
 	c.Assert(err, checker.IsNil)
-	defer cmd.Process.Kill()
+	defer s.killCmd(cmd)
 
 	defer os.Remove(traefikTestAccessLogFile)
 
@@ -92,7 +93,7 @@ func (s *LogRotationSuite) TestTraefikLogRotation(c *check.C) {
 
 	err := cmd.Start()
 	c.Assert(err, checker.IsNil)
-	defer cmd.Process.Kill()
+	defer s.killCmd(cmd)
 
 	defer os.Remove(traefikTestAccessLogFile)
 
@@ -140,7 +141,7 @@ func verifyEmptyErrorLog(c *check.C, name string) {
 		if e2 != nil {
 			return e2
 		}
-		c.Assert(traefikLog, checker.HasLen, 0)
+		c.Assert(string(traefikLog), checker.HasLen, 0)
 		return nil
 	})
 	c.Assert(err, checker.IsNil)
@@ -155,10 +156,14 @@ func verifyLogLines(c *check.C, fileName string, countInit int, accessLog bool) 
 		line := rotatedLog.Text()
 		if accessLog {
 			if len(line) > 0 {
-				CheckAccessLogFormat(c, line, count)
+				if !strings.Contains(line, "/api/rawdata") {
+					CheckAccessLogFormat(c, line, count)
+					count++
+				}
 			}
+		} else {
+			count++
 		}
-		count++
 	}
 
 	return count

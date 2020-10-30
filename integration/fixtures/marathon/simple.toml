@@ -1,17 +1,21 @@
-defaultEntryPoints = ["http"]
+[global]
+  checkNewVersion = false
+  sendAnonymousUsage = false
 
-logLevel = "DEBUG"
+[log]
+  level = "DEBUG"
 
 [entryPoints]
-  [entryPoints.http]
-  address = ":8000"
-[entryPoints.api]
-  address = ":9090"
+  [entryPoints.web]
+    address = ":8000"
+  [entryPoints.traefik]
+    address = ":9090"
 
 [api]
-  entryPoint = "api"
+  insecure = true
 
-[marathon]
-  endpoint = "{{.MarathonURL}}"
-  watch = true
-  exposedByDefault = true
+[providers]
+  [providers.marathon]
+    endpoint = "{{.MarathonURL}}"
+    watch = true
+    exposedByDefault = true

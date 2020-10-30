@@ -1,18 +1,16 @@
-defaultEntryPoints = ["http"]
+[global]
+  checkNewVersion = false
+  sendAnonymousUsage = false
 
-logLevel = "DEBUG"
+[log]
+  level = "DEBUG"
 
-[entryPoints]
-  [entryPoints.http]
+[entryPoints.web]
   address = ":8000"
-  [entryPoints.api]
-  address = ":8081"
-
-
-[consul]
-  endpoint = "{{.ConsulHost}}:8500"
-  watch = true
-  prefix = "traefik"
 
 [api]
-  entryPoint = "api"
+  insecure = true
+
+[providers.consul]
+  rootKey = "traefik"
+  endpoints = ["{{ .ConsulAddress }}"]

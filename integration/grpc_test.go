@@ -11,20 +11,22 @@ import (
 	"os"
 	"time"
 
-	"github.com/containous/traefik/integration/helloworld"
-	"github.com/containous/traefik/integration/try"
-	"github.com/containous/traefik/log"
 	"github.com/go-check/check"
+	"github.com/traefik/traefik/v2/integration/helloworld"
+	"github.com/traefik/traefik/v2/integration/try"
+	"github.com/traefik/traefik/v2/pkg/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
 
-var LocalhostCert []byte
-var LocalhostKey []byte
+var (
+	LocalhostCert []byte
+	LocalhostKey  []byte
+)
 
 const randCharset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
 
-// GRPCSuite
+// GRPCSuite tests suite.
 type GRPCSuite struct{ BaseSuite }
 
 type myserver struct {
@@ -50,7 +52,7 @@ func (s *myserver) StreamExample(in *helloworld.StreamExampleRequest, server hel
 	}
 
 	if err := server.Send(&helloworld.StreamExampleReply{Data: string(data)}); err != nil {
-		log.Error(err)
+		log.WithoutContext().Error(err)
 	}
 
 	<-s.stopStreamExample
@@ -90,7 +92,6 @@ func getHelloClientGRPC() (helloworld.GreeterClient, func() error, error) {
 		return nil, func() error { return nil }, err
 	}
 	return helloworld.NewGreeterClient(conn), conn.Close, nil
-
 }
 
 func getHelloClientGRPCh2c() (helloworld.GreeterClient, func() error, error) {
@@ -99,7 +100,6 @@ func getHelloClientGRPCh2c() (helloworld.GreeterClient, func() error, error) {
 		return nil, func() error { return nil }, err
 	}
 	return helloworld.NewGreeterClient(conn), conn.Close, nil
-
 }
 
 func callHelloClientGRPC(name string, secure bool) (string, error) {
@@ -164,10 +164,10 @@ func (s *GRPCSuite) TestGRPC(c *check.C) {
 
 	err = cmd.Start()
 	c.Assert(err, check.IsNil)
-	defer cmd.Process.Kill()
+	defer s.killCmd(cmd)
 
 	// wait for Traefik
-	err = try.GetRequest("http://127.0.0.1:8080/api/providers", 1*time.Second, try.BodyContains("Host:127.0.0.1"))
+	err = try.GetRequest("http://127.0.0.1:8080/api/rawdata", 1*time.Second, try.BodyContains("Host(`127.0.0.1`)"))
 	c.Assert(err, check.IsNil)
 
 	var response string
@@ -202,10 +202,10 @@ func (s *GRPCSuite) TestGRPCh2c(c *check.C) {
 
 	err = cmd.Start()
 	c.Assert(err, check.IsNil)
-	defer cmd.Process.Kill()
+	defer s.killCmd(cmd)
 
 	// wait for Traefik
-	err = try.GetRequest("http://127.0.0.1:8080/api/providers", 1*time.Second, try.BodyContains("Host:127.0.0.1"))
+	err = try.GetRequest("http://127.0.0.1:8080/api/rawdata", 1*time.Second, try.BodyContains("Host(`127.0.0.1`)"))
 	c.Assert(err, check.IsNil)
 
 	var response string
@@ -244,10 +244,10 @@ func (s *GRPCSuite) TestGRPCh2cTermination(c *check.C) {
 
 	err = cmd.Start()
 	c.Assert(err, check.IsNil)
-	defer cmd.Process.Kill()
+	defer s.killCmd(cmd)
 
 	// wait for Traefik
-	err = try.GetRequest("http://127.0.0.1:8080/api/providers", 1*time.Second, try.BodyContains("Host:127.0.0.1"))
+	err = try.GetRequest("http://127.0.0.1:8080/api/rawdata", 1*time.Second, try.BodyContains("Host(`127.0.0.1`)"))
 	c.Assert(err, check.IsNil)
 
 	var response string
@@ -286,10 +286,10 @@ func (s *GRPCSuite) TestGRPCInsecure(c *check.C) {
 
 	err = cmd.Start()
 	c.Assert(err, check.IsNil)
-	defer cmd.Process.Kill()
+	defer s.killCmd(cmd)
 
 	// wait for Traefik
-	err = try.GetRequest("http://127.0.0.1:8080/api/providers", 1*time.Second, try.BodyContains("Host:127.0.0.1"))
+	err = try.GetRequest("http://127.0.0.1:8080/api/rawdata", 1*time.Second, try.BodyContains("Host(`127.0.0.1`)"))
 	c.Assert(err, check.IsNil)
 
 	var response string
@@ -333,10 +333,10 @@ func (s *GRPCSuite) TestGRPCBuffer(c *check.C) {
 
 	err = cmd.Start()
 	c.Assert(err, check.IsNil)
-	defer cmd.Process.Kill()
+	defer s.killCmd(cmd)
 
 	// wait for Traefik
-	err = try.GetRequest("http://127.0.0.1:8080/api/providers", 1*time.Second, try.BodyContains("Host:127.0.0.1"))
+	err = try.GetRequest("http://127.0.0.1:8080/api/rawdata", 1*time.Second, try.BodyContains("Host(`127.0.0.1`)"))
 	c.Assert(err, check.IsNil)
 	var client helloworld.Greeter_StreamExampleClient
 	client, closer, err := callStreamExampleClientGRPC()
@@ -351,7 +351,7 @@ func (s *GRPCSuite) TestGRPCBuffer(c *check.C) {
 		received <- true
 	}()
 
-	err = try.Do(time.Second*10, func() error {
+	err = try.Do(10*time.Second, func() error {
 		select {
 		case <-received:
 			return nil
@@ -364,7 +364,6 @@ func (s *GRPCSuite) TestGRPCBuffer(c *check.C) {
 
 func (s *GRPCSuite) TestGRPCBufferWithFlushInterval(c *check.C) {
 	stopStreamExample := make(chan bool)
-	defer func() { stopStreamExample <- true }()
 	lis, err := net.Listen("tcp", ":0")
 	c.Assert(err, check.IsNil)
 	_, port, err := net.SplitHostPort(lis.Addr().String())
@@ -378,7 +377,64 @@ func (s *GRPCSuite) TestGRPCBufferWithFlushInterval(c *check.C) {
 		c.Assert(err, check.IsNil)
 	}()
 
-	file := s.adaptFile(c, "fixtures/grpc/config_with_flush.toml", struct {
+	file := s.adaptFile(c, "fixtures/grpc/config.toml", struct {
+		CertContent    string
+		KeyContent     string
+		GRPCServerPort string
+	}{
+		CertContent:    string(LocalhostCert),
+		KeyContent:     string(LocalhostKey),
+		GRPCServerPort: port,
+	})
+	defer os.Remove(file)
+
+	cmd, display := s.traefikCmd(withConfigFile(file))
+	defer display(c)
+	err = cmd.Start()
+	c.Assert(err, check.IsNil)
+	defer s.killCmd(cmd)
+
+	// wait for Traefik
+	err = try.GetRequest("http://127.0.0.1:8080/api/rawdata", 1*time.Second, try.BodyContains("Host(`127.0.0.1`)"))
+	c.Assert(err, check.IsNil)
+
+	var client helloworld.Greeter_StreamExampleClient
+	client, closer, err := callStreamExampleClientGRPC()
+	defer closer()
+	defer func() { stopStreamExample <- true }()
+	c.Assert(err, check.IsNil)
+
+	received := make(chan bool)
+	go func() {
+		tr, err := client.Recv()
+		c.Assert(err, check.IsNil)
+		c.Assert(len(tr.Data), check.Equals, 512)
+		received <- true
+	}()
+
+	err = try.Do(100*time.Millisecond, func() error {
+		select {
+		case <-received:
+			return nil
+		default:
+			return errors.New("failed to receive stream data")
+		}
+	})
+	c.Assert(err, check.IsNil)
+}
+
+func (s *GRPCSuite) TestGRPCWithRetry(c *check.C) {
+	lis, err := net.Listen("tcp", ":0")
+	_, port, err := net.SplitHostPort(lis.Addr().String())
+	c.Assert(err, check.IsNil)
+
+	go func() {
+		err := startGRPCServer(lis, &myserver{})
+		c.Log(err)
+		c.Assert(err, check.IsNil)
+	}()
+
+	file := s.adaptFile(c, "fixtures/grpc/config_retry.toml", struct {
 		CertContent    string
 		KeyContent     string
 		GRPCServerPort string
@@ -394,31 +450,17 @@ func (s *GRPCSuite) TestGRPCBufferWithFlushInterval(c *check.C) {
 
 	err = cmd.Start()
 	c.Assert(err, check.IsNil)
-	defer cmd.Process.Kill()
+	defer s.killCmd(cmd)
 
 	// wait for Traefik
-	err = try.GetRequest("http://127.0.0.1:8080/api/providers", 1*time.Second, try.BodyContains("Host:127.0.0.1"))
-	c.Assert(err, check.IsNil)
-	var client helloworld.Greeter_StreamExampleClient
-	client, closer, err := callStreamExampleClientGRPC()
-	defer closer()
+	err = try.GetRequest("http://127.0.0.1:8080/api/rawdata", 1*time.Second, try.BodyContains("Host(`127.0.0.1`)"))
 	c.Assert(err, check.IsNil)
 
-	received := make(chan bool)
-	go func() {
-		tr, err := client.Recv()
-		c.Assert(err, check.IsNil)
-		c.Assert(len(tr.Data), check.Equals, 512)
-		received <- true
-	}()
-
-	err = try.Do(time.Millisecond*100, func() error {
-		select {
-		case <-received:
-			return nil
-		default:
-			return errors.New("failed to receive stream data")
-		}
+	var response string
+	err = try.Do(1*time.Second, func() error {
+		response, err = callHelloClientGRPC("World", true)
+		return err
 	})
 	c.Assert(err, check.IsNil)
+	c.Assert(response, check.Equals, "Hello World")
 }

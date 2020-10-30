@@ -1,37 +1,48 @@
-logLevel = "DEBUG"
+[global]
+  checkNewVersion = false
+  sendAnonymousUsage = false
 
-defaultEntryPoints = ["https"]
+[log]
+  level = "DEBUG"
 
 [entryPoints]
-  [entryPoints.https]
-  address = ":4443"
-    [entryPoints.https.tls]
-     [entryPoints.https.tls.defaultCertificate]
-     certFile = "fixtures/https/snitest.com.cert"
-     keyFile = "fixtures/https/snitest.com.key"
-     [[entryPoints.https.tls.certificates]]
-     certFile = "fixtures/https/wildcard.snitest.com.cert"
-     keyFile = "fixtures/https/wildcard.snitest.com.key"
-     [[entryPoints.https.tls.certificates]]
-     certFile = "fixtures/https/www.snitest.com.cert"
-     keyFile = "fixtures/https/www.snitest.com.key"
+  [entryPoints.websecure]
+    address = ":4443"
 
 [api]
+  insecure = true
 
-[file]
+[providers.file]
+  filename = "{{ .SelfFilename }}"
 
-[backends]
-  [backends.backend1]
-    [backends.backend1.servers.server1]
-    url = "http://127.0.0.1:9010"
-    weight = 1
+## dynamic configuration ##
 
-[frontends]
-  [frontends.frontend1]
-  backend = "backend1"
-    [frontends.frontend1.routes.test_1]
-    rule = "Host:snitest.com"
-  [frontends.frontend2]
-  backend = "backend1"
-    [frontends.frontend2.routes.test_1]
-    rule = "Host:www.snitest.com"
+[http.routers]
+  [http.routers.router1]
+    service = "service1"
+    rule = "Host(`snitest.com`)"
+    [http.routers.router1.tls]
+
+  [http.routers.router2]
+    service = "service1"
+    rule = "Host(`www.snitest.com`)"
+    [http.routers.router2.tls]
+
+[http.services]
+  [http.services.service1]
+    [http.services.service1.loadBalancer]
+      [[http.services.service1.loadBalancer.servers]]
+        url = "http://127.0.0.1:9010"
+
+[[tls.certificates]]
+  certFile = "fixtures/https/wildcard.snitest.com.cert"
+  keyFile = "fixtures/https/wildcard.snitest.com.key"
+
+[[tls.certificates]]
+  certFile = "fixtures/https/www.snitest.com.cert"
+  keyFile = "fixtures/https/www.snitest.com.key"
+
+[tls.stores]
+  [tls.stores.default.defaultCertificate]
+    certFile = "fixtures/https/snitest.com.cert"
+    keyFile = "fixtures/https/snitest.com.key"

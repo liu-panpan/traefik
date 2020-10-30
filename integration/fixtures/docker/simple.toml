@@ -1,14 +1,19 @@
-defaultEntryPoints = ["http"]
+[global]
+  checkNewVersion = false
+  sendAnonymousUsage = false
 
-logLevel = "DEBUG"
+[log]
+  level = "DEBUG"
 
 [entryPoints]
-  [entryPoints.http]
-  address = ":8000"
+  [entryPoints.web]
+    address = ":8000"
 
 [api]
+  insecure = true
 
-[docker]
-endpoint = "{{.DockerHost}}"
-domain = "docker.localhost"
-exposedByDefault = true
+[providers]
+  [providers.docker]
+    endpoint = "{{ .DockerHost }}"
+    defaultRule = "{{ .DefaultRule }}"
+    exposedByDefault = true

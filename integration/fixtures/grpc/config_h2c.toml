@@ -1,24 +1,28 @@
-defaultEntryPoints = ["http"]
+[global]
+  checkNewVersion = false
+  sendAnonymousUsage = false
 
-debug=true
+[log]
+  level = "DEBUG"
 
 [entryPoints]
-  [entryPoints.http]
-  address = ":8081"
+  [entryPoints.web]
+    address = ":8081"
 
 [api]
+  insecure = true
 
-[file]
+[providers.file]
+  filename = "{{ .SelfFilename }}"
 
-[backends]
-  [backends.backend1]
-    [backends.backend1.servers.server1]
-    url = "h2c://127.0.0.1:{{ .GRPCServerPort }}"
-    weight = 1
+## dynamic configuration ##
 
+[http.routers]
+  [http.routers.router1]
+    rule = "Host(`127.0.0.1`)"
+    service = "service1"
 
-[frontends]
-  [frontends.frontend1]
-  backend = "backend1"
-    [frontends.frontend1.routes.test_1]
-    rule = "Host:127.0.0.1"
+[http.services]
+  [http.services.service1.loadBalancer]
+    [[http.services.service1.loadBalancer.servers]]
+      url = "h2c://127.0.0.1:{{ .GRPCServerPort }}"
